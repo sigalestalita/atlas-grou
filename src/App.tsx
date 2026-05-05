@@ -20,6 +20,7 @@ import Respondents from "@/pages/admin/Respondents";
 import Links from "@/pages/admin/Links";
 import ProgressPage from "@/pages/admin/Progress";
 import ExportPage from "@/pages/admin/Export";
+import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
