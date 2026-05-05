@@ -88,12 +88,9 @@ export default function SurveyPage() {
       labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
-    let leaders: string[] = [];
-    try {
-      leaders = typeof surveyData.leaders === 'string' ? JSON.parse(surveyData.leaders) : Array.isArray(surveyData.leaders) ? surveyData.leaders as string[] : [];
-    } catch { leaders = []; }
+    let leaders: LeaderObj[] = parseLeaders(surveyData.leaders);
 
-    setSurvey({ ...surveyData, scale_labels: labels, leaders } as any);
+    setSurvey({ ...surveyData, scale_labels: labels, leaders: leaders.map(l => l.name) } as any);
 
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
     const allQuestions: Question[] = [];
