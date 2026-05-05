@@ -30,6 +30,7 @@ export default function CompanyView() {
     { label: 'Dashboard', path: '', icon: LayoutDashboard },
     { label: 'Pesquisa', path: 'survey', icon: FileText },
     { label: 'Colaboradores', path: 'respondents', icon: Users },
+    { label: 'Avaliações', path: 'evaluations', icon: UserCheck },
     { label: 'Links', path: 'links', icon: Link2 },
     { label: 'Progresso', path: 'progress', icon: BarChart3 },
   ];
