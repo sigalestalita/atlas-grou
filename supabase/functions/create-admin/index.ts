@@ -112,15 +112,12 @@ Deno.serve(async (req) => {
 
     if (roleError) {
       return new Response(JSON.stringify({ error: roleError.message }), {
-      // Cleanup: delete the created user
-      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-      return new Response(JSON.stringify({ error: roleError.message }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ 
-      user: { id: newUser.user.id, email: newUser.user.email },
+      user: { id: userId, email },
       role,
       message: isBootstrap ? "Primeiro super_admin criado com sucesso!" : "Admin criado com sucesso!"
     }), {
