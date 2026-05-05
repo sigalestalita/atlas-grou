@@ -4,10 +4,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy, UserCheck, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import ExportReportDialog, { type ReportSection } from '@/components/ExportReportDialog';
 
 interface ContextType {
   company: { id: string; name: string; primary_color: string };
@@ -48,6 +50,10 @@ export default function Dashboard() {
   const [overallScore, setOverallScore] = useState(0);
   const [scaleMax, setScaleMax] = useState(5);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
+  const [showExport, setShowExport] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [surveyTitle, setSurveyTitle] = useState('');
+  const [companyBranding, setCompanyBranding] = useState<{ primary: string; secondary: string }>({ primary: '#ff5700', secondary: '#03104f' });
 
   useEffect(() => {
     if (!companyId) return;
