@@ -35,6 +35,9 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
 
+            {/* Setup route (bootstrap first admin) */}
+            <Route path="/setup" element={<Setup />} />
+
             {/* Anonymous survey route (no auth needed) */}
             <Route path="/survey/:slug/:token" element={<SurveyPage />} />
 
