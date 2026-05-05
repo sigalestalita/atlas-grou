@@ -55,7 +55,7 @@ export default function ExportPage() {
       (questions || []).forEach(q => {
         const vals = qMap.get(q.id) || [];
         const avg = vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : '';
-        row.push(avg);
+        row.push(avg as any);
       });
       rows.push(row);
     });
