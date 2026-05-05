@@ -52,7 +52,7 @@ export default function ExportReportDialog({
 
     for (const sec of selectedSections) {
       lines.push(`=== ${sec.label} ===`);
-      lines.push(sec.headers.join(','));
+      lines.push(sec.data.headers.join(','));
       for (const row of sec.data.rows) {
         lines.push(row.map(c => {
           const s = String(c);
