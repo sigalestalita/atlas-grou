@@ -56,6 +56,7 @@ const App = () => (
                 <Route index element={<Dashboard />} />
                 <Route path="survey" element={<SurveyConfig />} />
                 <Route path="respondents" element={<Respondents />} />
+                <Route path="evaluations" element={<EvaluationMatrix />} />
                 <Route path="links" element={<Links />} />
                 <Route path="progress" element={<ProgressPage />} />
                 <Route path="export" element={<ExportPage />} />
