@@ -54,16 +54,12 @@ export default function SurveyPage() {
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
-  const [selectedCompanyLeader, setSelectedCompanyLeader] = useState<string | null>(null);
-  const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
-  const [typedLeaders, setTypedLeaders] = useState<LeaderObj[]>([]);
+  const [selectedLeader, setSelectedLeader] = useState<string | null>(null);
 
-  interface LeaderObj { name: string; type: 'company' | 'department' }
-
-  const parseLeaders = (raw: any): LeaderObj[] => {
+  const parseLeaderNames = (raw: any): string[] => {
     try {
       const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
-      return arr.map((l: any) => typeof l === 'string' ? { name: l, type: 'company' as const } : l);
+      return arr.map((l: any) => typeof l === 'string' ? l : l.name);
     } catch { return []; }
   };
 
