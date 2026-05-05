@@ -190,6 +190,36 @@ export default function SurveyConfig() {
             </Accordion>
           </CardContent>
         </Card>
+
+        {/* Leaders configuration */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5" />
+              Lideranças
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Configure as lideranças que o respondente poderá selecionar antes de iniciar a pesquisa.</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {leaders.map((leader, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <span className="text-sm">{leader}</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
+                  <X className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Input
+                value={newLeader}
+                onChange={e => setNewLeader(e.target.value)}
+                placeholder="Ex: Aline Néglia – Administrativo"
+                onKeyDown={e => e.key === 'Enter' && addLeader()}
+              />
+              <Button onClick={addLeader} size="sm">Adicionar</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {surveys.length === 0 && <Card><CardContent className="py-12 text-center text-muted-foreground">Selecione um template acima para criar sua pesquisa</CardContent></Card>}
