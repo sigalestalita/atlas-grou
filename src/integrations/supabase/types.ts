@@ -204,6 +204,7 @@ export type Database = {
           company_leadership: string | null
           department: string | null
           department_leadership: string | null
+          evaluated_leader: string | null
           id: string
           question_id: string
           submitted_at: string
@@ -215,6 +216,7 @@ export type Database = {
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
+          evaluated_leader?: string | null
           id?: string
           question_id: string
           submitted_at?: string
@@ -226,6 +228,7 @@ export type Database = {
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
+          evaluated_leader?: string | null
           id?: string
           question_id?: string
           submitted_at?: string
