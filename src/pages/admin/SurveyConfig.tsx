@@ -27,18 +27,23 @@ export default function SurveyConfig() {
   const [newSection, setNewSection] = useState('');
   const [newQuestions, setNewQuestions] = useState<Record<string, string>>({});
   const [newLeader, setNewLeader] = useState('');
+  const [newLeaderType, setNewLeaderType] = useState<'company' | 'department'>('company');
   const { toast } = useToast();
 
-  const leaders: string[] = (() => {
+  interface Leader { name: string; type: 'company' | 'department' }
+
+  const leaders: Leader[] = (() => {
     if (!selected?.leaders) return [];
     try {
-      return typeof selected.leaders === 'string' ? JSON.parse(selected.leaders) : Array.isArray(selected.leaders) ? selected.leaders : [];
+      const raw = typeof selected.leaders === 'string' ? JSON.parse(selected.leaders) : Array.isArray(selected.leaders) ? selected.leaders : [];
+      // Migrate old string format to new object format
+      return raw.map((l: any) => typeof l === 'string' ? { name: l, type: 'company' as const } : l);
     } catch { return []; }
   })();
 
   const addLeader = async () => {
     if (!newLeader.trim() || !selected) return;
-    const updated = [...leaders, newLeader.trim()];
+    const updated = [...leaders, { name: newLeader.trim(), type: newLeaderType }];
     await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
     setSelected({ ...selected, leaders: updated });
     setNewLeader('');
