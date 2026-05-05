@@ -53,7 +53,7 @@ export default function SurveyConfig() {
   const removeLeader = async (index: number) => {
     if (!selected) return;
     const updated = leaders.filter((_, i) => i !== index);
-    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    await supabase.from('surveys').update({ leaders: updated as any }).eq('id', selected.id);
     setSelected({ ...selected, leaders: updated });
   };
 
