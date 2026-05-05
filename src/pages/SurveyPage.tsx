@@ -343,10 +343,8 @@ export default function SurveyPage() {
                       round.completed ? 'scale-100' : i === currentRoundIndex ? 'scale-110 ring-2 ring-offset-2' : 'bg-gray-200'
                     }`}
                     style={
-                      round.completed
-                        ? { backgroundColor: primaryColor }
-                        : i === currentRoundIndex
-                        ? { backgroundColor: primaryColor, ringColor: primaryColor }
+                      round.completed || i === currentRoundIndex
+                        ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}80` }
                         : {}
                     }
                     title={round.leaderName}
@@ -404,10 +402,8 @@ export default function SurveyPage() {
                     round.completed ? '' : i === currentRoundIndex ? 'ring-2 ring-offset-2' : 'bg-gray-200'
                   }`}
                   style={
-                    round.completed
-                      ? { backgroundColor: primaryColor }
-                      : i === currentRoundIndex
-                      ? { backgroundColor: `${primaryColor}40`, ringColor: primaryColor }
+                    round.completed || i === currentRoundIndex
+                      ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}40` }
                       : {}
                   }
                   title={round.leaderName}
