@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield } from 'lucide-react';
+import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield, Users } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -25,6 +25,7 @@ interface SurveyData {
   scale_min: number;
   scale_max: number;
   scale_labels: string[];
+  leaders: string[];
 }
 
 interface CompanyBranding {
@@ -45,7 +46,7 @@ const SCALE_LABELS: Record<string, string[]> = {
 
 export default function SurveyPage() {
   const { slug, token } = useParams();
-  const [status, setStatus] = useState<'loading' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'done'>('loading');
+  const [status, setStatus] = useState<'loading' | 'leader_select' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'done'>('loading');
   const [survey, setSurvey] = useState<SurveyData | null>(null);
   const [branding, setBranding] = useState<CompanyBranding | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -53,6 +54,7 @@ export default function SurveyPage() {
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
+  const [selectedLeader, setSelectedLeader] = useState<string | null>(null);
 
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
@@ -76,7 +78,12 @@ export default function SurveyPage() {
       labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
-    setSurvey({ ...surveyData, scale_labels: labels } as any);
+    let leaders: string[] = [];
+    try {
+      leaders = typeof surveyData.leaders === 'string' ? JSON.parse(surveyData.leaders) : Array.isArray(surveyData.leaders) ? surveyData.leaders as string[] : [];
+    } catch { leaders = []; }
+
+    setSurvey({ ...surveyData, scale_labels: labels, leaders } as any);
 
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
     const allQuestions: Question[] = [];
@@ -96,6 +103,17 @@ export default function SurveyPage() {
       });
     }
     setQuestions(allQuestions);
+
+    // If leaders are configured, show leader selection first
+    if (leaders.length > 0) {
+      setStatus('leader_select');
+    } else {
+      setStatus('ready');
+    }
+  };
+
+  const handleLeaderConfirm = () => {
+    if (!selectedLeader) return;
     setStatus('ready');
   };
 
@@ -129,21 +147,18 @@ export default function SurveyPage() {
         text_value: typeof ans === 'string' ? ans : justification,
         department: respondent.department,
         company_leadership: respondent.company_leadership,
-        department_leadership: respondent.department_leadership,
+        department_leadership: selectedLeader || respondent.department_leadership,
       };
     }).filter(r => r.value !== null || r.text_value !== null);
 
-    // If there are justifications for scale/choice questions, add separate rows
     for (const q of questions) {
       const justification = justifications[q.id];
       if (justification && q.has_justification && answers[q.id] !== undefined) {
         const existingRow = responseRows.find(r => r.question_id === q.id);
         if (existingRow) {
-          // Merge justification into the text_value
           if (typeof answers[q.id] === 'number') {
             existingRow.text_value = justification;
           } else {
-            // For choice: text_value already has the choice, append justification
             existingRow.text_value = `${answers[q.id]}|||${justification}`;
           }
         }
@@ -160,7 +175,13 @@ export default function SurveyPage() {
   const answeredCount = questions.filter(q => answers[q.id] !== undefined).length;
   const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
   const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.4));
-  const allAnswered = questions.filter(q => q.question_type !== 'open_text').every(q => answers[q.id] !== undefined);
+  // ALL questions are now mandatory, including open_text
+  const allAnswered = questions.every(q => {
+    const ans = answers[q.id];
+    if (ans === undefined) return false;
+    if (q.question_type === 'open_text' && typeof ans === 'string' && ans.trim() === '') return false;
+    return true;
+  });
   const currentQ = questions[currentIndex];
 
   const primaryColor = branding?.primary_color || '#3B82F6';
@@ -214,6 +235,70 @@ export default function SurveyPage() {
             <span>Suas respostas são completamente anônimas.</span>
           </div>
           {branding && <p className="mt-6 text-sm text-muted-foreground">{branding.name}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // Leader selection screen
+  if (status === 'leader_select' && survey) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
+        <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
+            <span className="font-semibold text-sm">{branding?.name}</span>
+          </div>
+        </header>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl animate-in fade-in duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <Users className="h-6 w-6" style={{ color: primaryColor }} />
+              <h2 className="text-xl md:text-2xl font-bold">Quem é sua liderança imediata?</h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {survey.leaders.map(leader => {
+                const isSelected = selectedLeader === leader;
+                return (
+                  <button
+                    key={leader}
+                    onClick={() => setSelectedLeader(leader)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
+                      isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
+                    style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
+                  >
+                    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      isSelected ? '' : 'border-gray-300'
+                    }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                    </span>
+                    <span className="text-sm font-medium">{leader}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <Button
+                onClick={handleLeaderConfirm}
+                disabled={!selectedLeader}
+                style={{ backgroundColor: primaryColor }}
+                className="text-white px-8"
+              >
+                Iniciar Pesquisa <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
+                <Shield className="h-3 w-3" />
+                Sua escolha não será associada às suas respostas
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -282,7 +367,7 @@ export default function SurveyPage() {
               </div>
             )}
 
-            {/* Choice question (Sim/Não/Em partes) */}
+            {/* Choice question */}
             {currentQ.question_type === 'choice' && currentQ.options && (
               <div className="space-y-3">
                 {currentQ.options.map(option => {
@@ -310,12 +395,17 @@ export default function SurveyPage() {
 
             {/* Open text question */}
             {currentQ.question_type === 'open_text' && (
-              <Textarea
-                value={(answers[currentQ.id] as string) || ''}
-                onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
-                placeholder="Escreva sua resposta aqui..."
-                className="min-h-[120px] text-base"
-              />
+              <div>
+                <Textarea
+                  value={(answers[currentQ.id] as string) || ''}
+                  onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
+                  placeholder="Escreva sua resposta aqui... (obrigatório)"
+                  className="min-h-[120px] text-base"
+                />
+                {answers[currentQ.id] !== undefined && typeof answers[currentQ.id] === 'string' && (answers[currentQ.id] as string).trim() === '' && (
+                  <p className="text-sm text-red-500 mt-2">Esta resposta é obrigatória.</p>
+                )}
+              </div>
             )}
 
             {/* Justification field */}
