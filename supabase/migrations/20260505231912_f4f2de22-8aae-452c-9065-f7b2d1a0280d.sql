@@ -1,0 +1,1 @@
+ALTER TABLE public.surveys ADD COLUMN intro_text text;
