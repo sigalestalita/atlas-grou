@@ -20,6 +20,7 @@ import Respondents from "@/pages/admin/Respondents";
 import Links from "@/pages/admin/Links";
 import ProgressPage from "@/pages/admin/Progress";
 import ExportPage from "@/pages/admin/Export";
+import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,7 @@ const App = () => (
                 <Route index element={<Dashboard />} />
                 <Route path="survey" element={<SurveyConfig />} />
                 <Route path="respondents" element={<Respondents />} />
+                <Route path="evaluations" element={<EvaluationMatrix />} />
                 <Route path="links" element={<Links />} />
                 <Route path="progress" element={<ProgressPage />} />
                 <Route path="export" element={<ExportPage />} />
