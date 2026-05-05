@@ -182,6 +182,19 @@ export default function SurveyConfig() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Texto introdutório da pesquisa</label>
+              <Textarea
+                value={selected.intro_text || selected.description || ''}
+                onChange={e => setSelected({ ...selected, intro_text: e.target.value })}
+                onBlur={async () => {
+                  await supabase.from('surveys').update({ intro_text: selected.intro_text } as any).eq('id', selected.id);
+                  toast({ title: 'Texto introdutório salvo' });
+                }}
+                placeholder="Ex: Pesquisa de Clima Organizacional – Empresa X. Suas respostas são confidenciais e fundamentais para a melhoria contínua."
+                className="text-sm min-h-[80px]"
+              />
+            </div>
             <div className="flex gap-2">
               <Input value={newSection} onChange={e => setNewSection(e.target.value)} placeholder="Nova seção..." onKeyDown={e => e.key === 'Enter' && addSection()} />
               <Button onClick={addSection} size="sm">Adicionar Seção</Button>

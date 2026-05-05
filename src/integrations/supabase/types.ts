@@ -291,6 +291,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          intro_text: string | null
           is_template: boolean
           leaders: Json | null
           open_access: boolean
@@ -306,6 +307,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean
@@ -321,6 +323,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean

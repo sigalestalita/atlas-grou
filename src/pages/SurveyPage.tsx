@@ -368,11 +368,19 @@ export default function SurveyPage() {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-lg animate-in fade-in duration-500">
             <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-                <Users className="h-8 w-8" style={{ color: primaryColor }} />
-              </div>
+              {branding?.logo_url ? (
+                <img src={branding.logo_url} alt={branding.name} className="h-20 w-auto mx-auto mb-4 object-contain" />
+              ) : (
+                <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
+                  <Users className="h-8 w-8" style={{ color: primaryColor }} />
+                </div>
+              )}
               <h1 className="text-2xl font-bold mb-2">{survey?.title}</h1>
-              {survey?.description && <p className="text-muted-foreground mb-4">{survey.description}</p>}
+              {(survey as any)?.intro_text ? (
+                <p className="text-muted-foreground mb-4">{(survey as any).intro_text}</p>
+              ) : survey?.description ? (
+                <p className="text-muted-foreground mb-4">{survey.description}</p>
+              ) : null}
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-6">
                 <Clock className="h-4 w-4" />
                 <span>~{estimatedMinutes} min no total</span>
@@ -472,14 +480,22 @@ export default function SurveyPage() {
 
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-lg text-center animate-in fade-in duration-500">
-            <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-              <Users className="h-8 w-8" style={{ color: primaryColor }} />
-            </div>
+            {branding?.logo_url ? (
+              <img src={branding.logo_url} alt={branding.name} className="h-20 w-auto mx-auto mb-6 object-contain" />
+            ) : (
+              <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
+                <Users className="h-8 w-8" style={{ color: primaryColor }} />
+              </div>
+            )}
 
             {completedRounds === 0 && currentRoundIndex === 0 && (
               <div className="mb-6">
                 <h1 className="text-2xl font-bold mb-2">{survey?.title}</h1>
-                {survey?.description && <p className="text-muted-foreground">{survey.description}</p>}
+                {(survey as any)?.intro_text ? (
+                  <p className="text-muted-foreground">{(survey as any).intro_text}</p>
+                ) : survey?.description ? (
+                  <p className="text-muted-foreground">{survey.description}</p>
+                ) : null}
                 <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   <span>~{estimatedMinutes} min no total · {totalRounds} avaliação{totalRounds > 1 ? 'ões' : ''}</span>
