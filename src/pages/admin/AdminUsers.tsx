@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, UserCog } from 'lucide-react';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
 
 export default function AdminUsers() {
   const [roles, setRoles] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', role: 'company_admin', company_id: '' });
   const { toast } = useToast();
 
@@ -31,38 +32,46 @@ export default function AdminUsers() {
       toast({ title: 'Preencha email e senha', variant: 'destructive' });
       return;
     }
+    if (form.password.length < 6) {
+      toast({ title: 'Senha deve ter pelo menos 6 caracteres', variant: 'destructive' });
+      return;
+    }
     if (form.role === 'company_admin' && !form.company_id) {
       toast({ title: 'Selecione uma empresa', variant: 'destructive' });
       return;
     }
 
-    // Create auth user via supabase admin (this would normally be an edge function)
-    // For now, we use signUp
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: form.email.trim(),
-      password: form.password,
-    });
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-admin', {
+        body: {
+          email: form.email.trim(),
+          password: form.password,
+          role: form.role,
+          company_id: form.role === 'company_admin' ? form.company_id : undefined,
+        },
+      });
 
-    if (authError || !authData.user) {
-      toast({ title: 'Erro ao criar usuário', description: authError?.message, variant: 'destructive' });
-      return;
+      if (error) {
+        toast({ title: 'Erro ao criar admin', description: error.message, variant: 'destructive' });
+        setCreating(false);
+        return;
+      }
+
+      if (data?.error) {
+        toast({ title: 'Erro ao criar admin', description: data.error, variant: 'destructive' });
+        setCreating(false);
+        return;
+      }
+
+      toast({ title: 'Admin criado com sucesso', description: `${form.email} — ${form.role === 'super_admin' ? 'Super Admin' : 'Admin Empresa'}` });
+      setOpen(false);
+      setForm({ email: '', password: '', role: 'company_admin', company_id: '' });
+      load();
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     }
-
-    const { error: roleError } = await supabase.from('user_roles').insert({
-      user_id: authData.user.id,
-      role: form.role as any,
-      company_id: form.role === 'company_admin' ? form.company_id : null,
-    });
-
-    if (roleError) {
-      toast({ title: 'Erro ao atribuir role', description: roleError.message, variant: 'destructive' });
-      return;
-    }
-
-    toast({ title: 'Admin criado com sucesso' });
-    setOpen(false);
-    setForm({ email: '', password: '', role: 'company_admin', company_id: '' });
-    load();
+    setCreating(false);
   };
 
   const deleteRole = async (id: string) => {
@@ -84,8 +93,14 @@ export default function AdminUsers() {
           <DialogContent>
             <DialogHeader><DialogTitle>Novo Administrador</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
-              <div className="space-y-1"><label className="text-sm font-medium">Email</label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-              <div className="space-y-1"><label className="text-sm font-medium">Senha</label><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Email</label>
+                <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="admin@empresa.com" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Senha</label>
+                <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Mínimo 6 caracteres" />
+              </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">Tipo</label>
                 <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
@@ -105,7 +120,9 @@ export default function AdminUsers() {
                   </Select>
                 </div>
               )}
-              <Button onClick={createAdmin} className="w-full">Criar Admin</Button>
+              <Button onClick={createAdmin} className="w-full" disabled={creating}>
+                {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : 'Criar Admin'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -119,19 +136,33 @@ export default function AdminUsers() {
                 <TableHead>User ID</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Empresa</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {roles.map(r => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.user_id?.substring(0, 8)}...</TableCell>
-                  <TableCell><Badge variant={r.role === 'super_admin' ? 'default' : 'secondary'}>{r.role === 'super_admin' ? 'Super Admin' : 'Admin Empresa'}</Badge></TableCell>
-                  <TableCell>{companies.find(c => c.id === r.company_id)?.name || '-'}</TableCell>
-                  <TableCell><Button variant="ghost" size="icon" onClick={() => deleteRole(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                  <TableCell>
+                    <Badge variant={r.role === 'super_admin' ? 'default' : 'secondary'}>
+                      {r.role === 'super_admin' ? 'Super Admin' : 'Admin Empresa'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{companies.find(c => c.id === r.company_id)?.name || '—'}</TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" onClick={() => deleteRole(r.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
-              {roles.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhum admin cadastrado</TableCell></TableRow>}
+              {roles.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    Nenhum admin cadastrado
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

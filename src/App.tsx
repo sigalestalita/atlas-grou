@@ -8,6 +8,7 @@ import { RequireAuth, RequireSuperAdmin } from "@/components/RequireAuth";
 import AdminLayout from "@/components/AdminLayout";
 import Login from "@/pages/Login";
 import SurveyPage from "@/pages/SurveyPage";
+import Setup from "@/pages/Setup";
 import Companies from "@/pages/admin/Companies";
 import Templates from "@/pages/admin/Templates";
 import AdminUsers from "@/pages/admin/AdminUsers";
@@ -33,6 +34,9 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+
+            {/* Setup route (bootstrap first admin) */}
+            <Route path="/setup" element={<Setup />} />
 
             {/* Anonymous survey route (no auth needed) */}
             <Route path="/survey/:slug/:token" element={<SurveyPage />} />
