@@ -45,7 +45,7 @@ type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' |
 const SCALE_LABELS: Record<string, string[]> = {
   avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
   satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
-  concordancia: ['Discordo Totalmente', 'Discordo', 'Neutro', 'Concordo', 'Concordo Totalmente'],
+  concordancia: ['Discordo totalmente', 'Discordo parcialmente', 'Neutro', 'Concordo parcialmente', 'Concordo totalmente'],
   frequencia: ['Nunca', 'Raramente', 'Às vezes', 'Frequentemente', 'Sempre'],
   confianca: ['Muito Baixo', 'Baixo', 'Moderado', 'Alto', 'Muito Alto'],
   alinhamento: ['Totalmente Desalinhado', 'Pouco Alinhado', 'Parcialmente', 'Bem Alinhado', 'Totalmente Alinhado'],
