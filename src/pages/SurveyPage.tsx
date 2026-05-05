@@ -269,11 +269,15 @@ export default function SurveyPage() {
         setCurrentRoundIndex(nextIncomplete);
         setStatus('round_done');
       } else {
-        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        if (respondent.id) {
+          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        }
         setStatus('done');
       }
     } else {
-      await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+      if (respondent.id) {
+        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+      }
       setStatus('done');
     }
   };
