@@ -150,7 +150,7 @@ export default function SurveyConfig() {
         </div>
       )}
 
-      {selected && (
+      {selected && (<>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
