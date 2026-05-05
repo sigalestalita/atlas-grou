@@ -44,7 +44,7 @@ export default function SurveyConfig() {
   const addLeader = async () => {
     if (!newLeader.trim() || !selected) return;
     const updated = [...leaders, { name: newLeader.trim(), type: newLeaderType }];
-    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    await supabase.from('surveys').update({ leaders: updated as any }).eq('id', selected.id);
     setSelected({ ...selected, leaders: updated });
     setNewLeader('');
     toast({ title: 'Liderança adicionada' });
