@@ -73,18 +73,36 @@ export default function SurveyPage() {
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
   const loadSurvey = async () => {
-    if (!slug || !token) { setStatus('invalid'); return; }
+    if (!slug) { setStatus('invalid'); return; }
 
     const { data: company } = await supabase.from('companies').select('*').eq('slug', slug).single();
     if (!company) { setStatus('invalid'); return; }
     setBranding({ name: company.name, logo_url: company.logo_url, primary_color: company.primary_color, secondary_color: company.secondary_color });
 
-    const { data: resp } = await supabase.from('respondents').select('*').eq('token', token).single();
-    if (!resp) { setStatus('invalid'); return; }
-    if (resp.status === 'responded') { setStatus('already_responded'); return; }
-    setRespondent(resp);
+    let surveyData: any = null;
+    let resp: any = null;
 
-    const { data: surveyData } = await supabase.from('surveys').select('*').eq('id', resp.survey_id).eq('status', 'active').single();
+    if (token) {
+      // Token-based access (individual respondent)
+      const { data: respData } = await supabase.from('respondents').select('*').eq('token', token).single();
+      if (!respData) { setStatus('invalid'); return; }
+      if (respData.status === 'responded') { setStatus('already_responded'); return; }
+      resp = respData;
+      setRespondent(resp);
+
+      const { data: sd } = await supabase.from('surveys').select('*').eq('id', resp.survey_id).eq('status', 'active').single();
+      surveyData = sd;
+    } else {
+      // Open access (no token — anonymous volume survey)
+      const { data: sd } = await supabase.from('surveys').select('*').eq('company_id', company.id).eq('status', 'active').eq('open_access', true).order('created_at', { ascending: false }).limit(1).single();
+      surveyData = sd;
+      if (surveyData) {
+        // Create a virtual respondent object for open access
+        resp = { id: null, survey_id: surveyData.id, name: '', department: null, company_leadership: null, department_leadership: null };
+        setRespondent(resp);
+      }
+    }
+
     if (!surveyData) { setStatus('invalid'); return; }
 
     let labels: string[] = [];
@@ -251,11 +269,15 @@ export default function SurveyPage() {
         setCurrentRoundIndex(nextIncomplete);
         setStatus('round_done');
       } else {
-        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        if (respondent.id) {
+          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        }
         setStatus('done');
       }
     } else {
-      await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+      if (respondent.id) {
+        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+      }
       setStatus('done');
     }
   };

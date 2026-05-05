@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Play, Square, Trash2, Copy, Users, X, Building2, UserCheck } from 'lucide-react';
+import { Plus, Play, Square, Trash2, Copy, Users, X, Building2, UserCheck, Globe } from 'lucide-react';
 
 interface ContextType { company: { id: string } }
 
@@ -161,6 +162,20 @@ export default function SurveyConfig() {
             <div>
               <CardTitle>{selected.title}</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Escala: {selected.scale_min} a {selected.scale_max}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <Switch
+                  checked={selected.open_access || false}
+                  onCheckedChange={async (checked) => {
+                    await supabase.from('surveys').update({ open_access: checked } as any).eq('id', selected.id);
+                    setSelected({ ...selected, open_access: checked });
+                    toast({ title: checked ? 'Acesso aberto ativado' : 'Acesso aberto desativado' });
+                  }}
+                />
+                <label className="text-sm flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  Link aberto (sem cadastro de colaboradores)
+                </label>
+              </div>
             </div>
             <Button onClick={toggleStatus} variant={selected.status === 'active' ? 'destructive' : 'default'} size="sm">
               {selected.status === 'active' ? <><Square className="mr-2 h-4 w-4" />Encerrar</> : <><Play className="mr-2 h-4 w-4" />Ativar</>}

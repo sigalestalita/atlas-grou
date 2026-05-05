@@ -40,8 +40,9 @@ const App = () => (
             {/* Setup route (bootstrap first admin) */}
             <Route path="/setup" element={<Setup />} />
 
-            {/* Anonymous survey route (no auth needed) */}
+            {/* Anonymous survey routes (no auth needed) */}
             <Route path="/survey/:slug/:token" element={<SurveyPage />} />
+            <Route path="/survey/:slug" element={<SurveyPage />} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
