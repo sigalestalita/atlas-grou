@@ -9,6 +9,7 @@ interface Company {
   name: string;
   slug: string;
   primary_color: string;
+  logo_url: string | null;
 }
 
 export default function CompanyView() {
