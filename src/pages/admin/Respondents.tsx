@@ -57,7 +57,7 @@ export default function Respondents() {
       company_leadership: String(row['Liderança Empresarial'] || row['company_leadership'] || '').trim() || null,
       department_leadership: String(row['Liderança Departamento'] || row['department_leadership'] || '').trim() || null,
       token: generateToken(),
-    })).filter(r => r.name);
+    }));
 
     if (newRespondents.length === 0) {
       toast({ title: 'Nenhum colaborador encontrado na planilha', variant: 'destructive' });
