@@ -90,7 +90,7 @@ export default function AdminLayout() {
       <div className="min-h-screen flex w-full">
         <AdminSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center border-b bg-card px-4 gap-4">
+          <header className="h-14 flex items-center border-b border-sidebar-border bg-sidebar text-sidebar-foreground px-4 gap-4">
             <SidebarTrigger />
           </header>
           <main className="flex-1 p-6 overflow-auto">
