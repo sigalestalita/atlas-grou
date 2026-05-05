@@ -289,6 +289,8 @@ export default function SurveyPage() {
     const ans = answers[q.id];
     if (ans === undefined) return false;
     if ((q.question_type === 'open_text' || q.question_type === 'text') && typeof ans === 'string' && ans.trim() === '') return false;
+    // Justification is mandatory when has_justification is true
+    if (q.has_justification && (!justifications[q.id] || justifications[q.id].trim() === '')) return false;
     return true;
   });
   const currentQ = questions[currentIndex];
