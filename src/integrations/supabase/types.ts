@@ -113,21 +113,36 @@ export type Database = {
       survey_questions: {
         Row: {
           created_at: string
+          has_justification: boolean
           id: string
+          justification_prompt: string | null
+          options: Json | null
+          question_type: string
+          scale_type: string | null
           section_id: string
           sort_order: number
           text: string
         }
         Insert: {
           created_at?: string
+          has_justification?: boolean
           id?: string
+          justification_prompt?: string | null
+          options?: Json | null
+          question_type?: string
+          scale_type?: string | null
           section_id: string
           sort_order?: number
           text: string
         }
         Update: {
           created_at?: string
+          has_justification?: boolean
           id?: string
+          justification_prompt?: string | null
+          options?: Json | null
+          question_type?: string
+          scale_type?: string | null
           section_id?: string
           sort_order?: number
           text?: string
@@ -151,7 +166,8 @@ export type Database = {
           question_id: string
           submitted_at: string
           survey_id: string
-          value: number
+          text_value: string | null
+          value: number | null
         }
         Insert: {
           company_leadership?: string | null
@@ -161,7 +177,8 @@ export type Database = {
           question_id: string
           submitted_at?: string
           survey_id: string
-          value: number
+          text_value?: string | null
+          value?: number | null
         }
         Update: {
           company_leadership?: string | null
@@ -171,7 +188,8 @@ export type Database = {
           question_id?: string
           submitted_at?: string
           survey_id?: string
-          value?: number
+          text_value?: string | null
+          value?: number | null
         }
         Relationships: [
           {

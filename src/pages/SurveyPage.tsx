@@ -3,13 +3,19 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { CheckCircle, Clock, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield } from 'lucide-react';
 
 interface Question {
   id: string;
   text: string;
   section_title: string;
   section_id: string;
+  question_type: string;
+  scale_type: string | null;
+  options: string[] | null;
+  has_justification: boolean;
+  justification_prompt: string | null;
 }
 
 interface SurveyData {
@@ -28,6 +34,15 @@ interface CompanyBranding {
   secondary_color: string;
 }
 
+const SCALE_LABELS: Record<string, string[]> = {
+  avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
+  satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
+  concordancia: ['Discordo Totalmente', 'Discordo', 'Neutro', 'Concordo', 'Concordo Totalmente'],
+  frequencia: ['Nunca', 'Raramente', 'Às vezes', 'Frequentemente', 'Sempre'],
+  confianca: ['Muito Baixo', 'Baixo', 'Moderado', 'Alto', 'Muito Alto'],
+  alinhamento: ['Totalmente Desalinhado', 'Pouco Alinhado', 'Parcialmente', 'Bem Alinhado', 'Totalmente Alinhado'],
+};
+
 export default function SurveyPage() {
   const { slug, token } = useParams();
   const [status, setStatus] = useState<'loading' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'done'>('loading');
@@ -35,89 +50,126 @@ export default function SurveyPage() {
   const [branding, setBranding] = useState<CompanyBranding | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<string, number | string>>({});
+  const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
 
-  useEffect(() => {
-    loadSurvey();
-  }, [slug, token]);
+  useEffect(() => { loadSurvey(); }, [slug, token]);
 
   const loadSurvey = async () => {
     if (!slug || !token) { setStatus('invalid'); return; }
 
-    // Find company
     const { data: company } = await supabase.from('companies').select('*').eq('slug', slug).single();
     if (!company) { setStatus('invalid'); return; }
     setBranding({ name: company.name, logo_url: company.logo_url, primary_color: company.primary_color, secondary_color: company.secondary_color });
 
-    // Find respondent by token
     const { data: resp } = await supabase.from('respondents').select('*').eq('token', token).single();
     if (!resp) { setStatus('invalid'); return; }
     if (resp.status === 'responded') { setStatus('already_responded'); return; }
     setRespondent(resp);
 
-    // Get survey
     const { data: surveyData } = await supabase.from('surveys').select('*').eq('id', resp.survey_id).eq('status', 'active').single();
     if (!surveyData) { setStatus('invalid'); return; }
 
     let labels: string[] = [];
     try {
-      labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels : [];
+      labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
     setSurvey({ ...surveyData, scale_labels: labels } as any);
 
-    // Get sections + questions
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
     const allQuestions: Question[] = [];
     for (const sec of sections || []) {
       const { data: qs } = await supabase.from('survey_questions').select('*').eq('section_id', sec.id).order('sort_order');
-      (qs || []).forEach(q => allQuestions.push({ id: q.id, text: q.text, section_title: sec.title, section_id: sec.id }));
+      (qs || []).forEach(q => {
+        let opts: string[] | null = null;
+        if (q.options) {
+          try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options as string[]; } catch { opts = null; }
+        }
+        allQuestions.push({
+          id: q.id, text: q.text, section_title: sec.title, section_id: sec.id,
+          question_type: q.question_type, scale_type: q.scale_type,
+          options: opts, has_justification: q.has_justification,
+          justification_prompt: q.justification_prompt,
+        });
+      });
     }
     setQuestions(allQuestions);
     setStatus('ready');
   };
 
-  const handleAnswer = (value: number) => {
+  const handleScaleAnswer = (value: number) => {
     const q = questions[currentIndex];
     setAnswers(a => ({ ...a, [q.id]: value }));
-    // Auto-advance after short delay
-    setTimeout(() => {
-      if (currentIndex < questions.length - 1) setCurrentIndex(i => i + 1);
-    }, 300);
+    if (!q.has_justification) {
+      setTimeout(() => { if (currentIndex < questions.length - 1) setCurrentIndex(i => i + 1); }, 400);
+    }
+  };
+
+  const handleChoiceAnswer = (option: string) => {
+    const q = questions[currentIndex];
+    setAnswers(a => ({ ...a, [q.id]: option }));
+    if (!q.has_justification) {
+      setTimeout(() => { if (currentIndex < questions.length - 1) setCurrentIndex(i => i + 1); }, 400);
+    }
   };
 
   const handleSubmit = async () => {
     if (!survey || !respondent) return;
     setStatus('submitting');
 
-    // Insert anonymous responses (with aggregatable metadata, NO respondent ID)
-    const responseRows = questions.map(q => ({
-      survey_id: survey.id,
-      question_id: q.id,
-      value: answers[q.id] || 0,
-      department: respondent.department,
-      company_leadership: respondent.company_leadership,
-      department_leadership: respondent.department_leadership,
-    }));
+    const responseRows = questions.map(q => {
+      const ans = answers[q.id];
+      const justification = justifications[q.id] || null;
+      return {
+        survey_id: survey.id,
+        question_id: q.id,
+        value: typeof ans === 'number' ? ans : null,
+        text_value: typeof ans === 'string' ? ans : justification,
+        department: respondent.department,
+        company_leadership: respondent.company_leadership,
+        department_leadership: respondent.department_leadership,
+      };
+    }).filter(r => r.value !== null || r.text_value !== null);
 
-    const { error: respError } = await supabase.from('survey_responses').insert(responseRows);
-    if (respError) { setStatus('ready'); return; }
+    // If there are justifications for scale/choice questions, add separate rows
+    for (const q of questions) {
+      const justification = justifications[q.id];
+      if (justification && q.has_justification && answers[q.id] !== undefined) {
+        const existingRow = responseRows.find(r => r.question_id === q.id);
+        if (existingRow) {
+          // Merge justification into the text_value
+          if (typeof answers[q.id] === 'number') {
+            existingRow.text_value = justification;
+          } else {
+            // For choice: text_value already has the choice, append justification
+            existingRow.text_value = `${answers[q.id]}|||${justification}`;
+          }
+        }
+      }
+    }
 
-    // Mark respondent as responded (tracking only)
+    const { error } = await supabase.from('survey_responses').insert(responseRows);
+    if (error) { setStatus('ready'); return; }
+
     await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
-
     setStatus('done');
   };
 
-  const progress = questions.length > 0 ? Math.round(((Object.keys(answers).length) / questions.length) * 100) : 0;
-  const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.3));
-  const allAnswered = questions.every(q => answers[q.id] !== undefined);
+  const answeredCount = questions.filter(q => answers[q.id] !== undefined).length;
+  const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
+  const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.4));
+  const allAnswered = questions.filter(q => q.question_type !== 'open_text').every(q => answers[q.id] !== undefined);
   const currentQ = questions[currentIndex];
 
-  // Dynamic branding styles
   const primaryColor = branding?.primary_color || '#3B82F6';
   const secondaryColor = branding?.secondary_color || '#1E40AF';
+
+  const getScaleLabels = (q: Question): string[] => {
+    if (q.scale_type && SCALE_LABELS[q.scale_type]) return SCALE_LABELS[q.scale_type];
+    return survey?.scale_labels || [];
+  };
 
   if (status === 'loading') {
     return (
@@ -156,7 +208,11 @@ export default function SurveyPage() {
         <div className="text-center max-w-md animate-in fade-in duration-500">
           <CheckCircle className="h-20 w-20 mx-auto mb-4" style={{ color: primaryColor }} />
           <h1 className="text-3xl font-bold mb-3">Obrigado!</h1>
-          <p className="text-muted-foreground text-lg">Sua resposta foi registrada com sucesso. Suas respostas são completamente anônimas.</p>
+          <p className="text-muted-foreground text-lg">Sua resposta foi registrada com sucesso.</p>
+          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Shield className="h-4 w-4" />
+            <span>Suas respostas são completamente anônimas.</span>
+          </div>
           {branding && <p className="mt-6 text-sm text-muted-foreground">{branding.name}</p>}
         </div>
       </div>
@@ -180,17 +236,16 @@ export default function SurveyPage() {
       {/* Progress */}
       <div className="px-4 py-2 bg-white/50">
         <div className="flex justify-between text-xs text-muted-foreground mb-1">
-          <span>{Object.keys(answers).length} de {questions.length} perguntas</span>
+          <span>{answeredCount} de {questions.length} perguntas</span>
           <span>{progress}%</span>
         </div>
-        <Progress value={progress} className="h-2" style={{ '--progress-color': primaryColor } as any} />
+        <Progress value={progress} className="h-2" />
       </div>
 
       {/* Question */}
       <div className="flex-1 flex items-center justify-center p-4">
         {currentQ && (
           <div className="w-full max-w-lg animate-in fade-in slide-in-from-right-4 duration-300" key={currentIndex}>
-            {/* Section label */}
             <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: primaryColor }}>
               {currentQ.section_title}
             </p>
@@ -199,32 +254,94 @@ export default function SurveyPage() {
               {currentQ.text}
             </h2>
 
-            {/* Scale buttons */}
-            <div className="space-y-3">
-              {survey && Array.from({ length: survey.scale_max - survey.scale_min + 1 }, (_, i) => survey.scale_min + i).map(value => {
-                const isSelected = answers[currentQ.id] === value;
-                const label = survey.scale_labels?.[value - survey.scale_min] || '';
-                return (
-                  <button
-                    key={value}
-                    onClick={() => handleAnswer(value)}
-                    className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                      isSelected ? 'border-current shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}
-                    style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
-                  >
-                    <span className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                      isSelected ? '' : 'border-gray-300'
-                    }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor, color: 'white' } : {}}>
-                      {value}
-                    </span>
-                    {label && <span className="text-sm">{label}</span>}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Scale question */}
+            {currentQ.question_type === 'scale' && survey && (
+              <div className="space-y-3">
+                {Array.from({ length: survey.scale_max - survey.scale_min + 1 }, (_, i) => survey.scale_min + i).map(value => {
+                  const isSelected = answers[currentQ.id] === value;
+                  const labels = getScaleLabels(currentQ);
+                  const label = labels[value - survey.scale_min] || '';
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => handleScaleAnswer(value)}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
+                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
+                    >
+                      <span className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                        isSelected ? '' : 'border-gray-300'
+                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor, color: 'white' } : {}}>
+                        {value}
+                      </span>
+                      {label && <span className="text-sm">{label}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Choice question (Sim/Não/Em partes) */}
+            {currentQ.question_type === 'choice' && currentQ.options && (
+              <div className="space-y-3">
+                {currentQ.options.map(option => {
+                  const isSelected = answers[currentQ.id] === option;
+                  return (
+                    <button
+                      key={option}
+                      onClick={() => handleChoiceAnswer(option)}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
+                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
+                    >
+                      <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? '' : 'border-gray-300'
+                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                      </span>
+                      <span className="text-sm font-medium">{option}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Open text question */}
+            {currentQ.question_type === 'open_text' && (
+              <Textarea
+                value={(answers[currentQ.id] as string) || ''}
+                onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
+                placeholder="Escreva sua resposta aqui..."
+                className="min-h-[120px] text-base"
+              />
+            )}
+
+            {/* Justification field */}
+            {currentQ.has_justification && answers[currentQ.id] !== undefined && (
+              <div className="mt-6 animate-in fade-in duration-300">
+                <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                  ✎ {currentQ.justification_prompt}
+                </label>
+                <Textarea
+                  value={justifications[currentQ.id] || ''}
+                  onChange={e => setJustifications(j => ({ ...j, [currentQ.id]: e.target.value }))}
+                  placeholder="Opcional – sua justificativa enriquece a análise..."
+                  className="min-h-[80px] text-sm"
+                />
+              </div>
+            )}
           </div>
         )}
+      </div>
+
+      {/* Anonymity badge */}
+      <div className="flex justify-center pb-2">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
+          <Shield className="h-3 w-3" />
+          Respostas 100% anônimas
+        </div>
       </div>
 
       {/* Navigation */}
