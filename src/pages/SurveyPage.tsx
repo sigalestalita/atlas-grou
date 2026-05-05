@@ -256,80 +256,39 @@ export default function SurveyPage() {
         </header>
 
         <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl animate-in fade-in duration-500 space-y-8">
-            {/* Company leadership */}
-            {typedLeaders.filter(l => l.type === 'company').length > 0 && (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Users className="h-6 w-6" style={{ color: primaryColor }} />
-                  <h2 className="text-xl md:text-2xl font-bold">Liderança Empresarial</h2>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">Selecione a liderança empresarial que você deseja avaliar:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {typedLeaders.filter(l => l.type === 'company').map(leader => {
-                    const isSelected = selectedCompanyLeader === leader.name;
-                    return (
-                      <button
-                        key={leader.name}
-                        onClick={() => setSelectedCompanyLeader(leader.name)}
-                        className={`p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
-                          isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                        }`}
-                        style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
-                      >
-                        <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          isSelected ? '' : 'border-gray-300'
-                        }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
-                          {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
-                        </span>
-                        <span className="text-sm font-medium">{leader.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+          <div className="w-full max-w-2xl animate-in fade-in duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <Users className="h-6 w-6" style={{ color: primaryColor }} />
+              <h2 className="text-xl md:text-2xl font-bold">Quem é sua liderança imediata?</h2>
+            </div>
 
-            {/* Department leadership */}
-            {typedLeaders.filter(l => l.type === 'department').length > 0 && (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Users className="h-6 w-6" style={{ color: primaryColor }} />
-                  <h2 className="text-xl md:text-2xl font-bold">Liderança de Departamento</h2>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">Selecione a liderança do seu departamento:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {typedLeaders.filter(l => l.type === 'department').map(leader => {
-                    const isSelected = selectedDeptLeader === leader.name;
-                    return (
-                      <button
-                        key={leader.name}
-                        onClick={() => setSelectedDeptLeader(leader.name)}
-                        className={`p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
-                          isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                        }`}
-                        style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
-                      >
-                        <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          isSelected ? '' : 'border-gray-300'
-                        }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
-                          {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
-                        </span>
-                        <span className="text-sm font-medium">{leader.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {survey.leaders.map(leader => {
+                const isSelected = selectedLeader === leader;
+                return (
+                  <button
+                    key={leader}
+                    onClick={() => setSelectedLeader(leader)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
+                      isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
+                    style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
+                  >
+                    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      isSelected ? '' : 'border-gray-300'
+                    }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                    </span>
+                    <span className="text-sm font-medium">{leader}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-            <div className="flex justify-center">
+            <div className="mt-8 flex justify-center">
               <Button
                 onClick={handleLeaderConfirm}
-                disabled={
-                  (typedLeaders.filter(l => l.type === 'company').length > 0 && !selectedCompanyLeader) ||
-                  (typedLeaders.filter(l => l.type === 'department').length > 0 && !selectedDeptLeader)
-                }
+                disabled={!selectedLeader}
                 style={{ backgroundColor: primaryColor }}
                 className="text-white px-8"
               >
@@ -337,7 +296,7 @@ export default function SurveyPage() {
               </Button>
             </div>
 
-            <div className="flex justify-center">
+            <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
                 <Shield className="h-3 w-3" />
                 Sua escolha não será associada às suas respostas
