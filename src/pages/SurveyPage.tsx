@@ -289,6 +289,8 @@ export default function SurveyPage() {
     const ans = answers[q.id];
     if (ans === undefined) return false;
     if ((q.question_type === 'open_text' || q.question_type === 'text') && typeof ans === 'string' && ans.trim() === '') return false;
+    // Justification is mandatory when has_justification is true
+    if (q.has_justification && (!justifications[q.id] || justifications[q.id].trim() === '')) return false;
     return true;
   });
   const currentQ = questions[currentIndex];
@@ -761,15 +763,18 @@ export default function SurveyPage() {
             {/* Justification field */}
             {currentQ.has_justification && answers[currentQ.id] !== undefined && (
               <div className="mt-6 animate-in fade-in duration-300">
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  ✎ {currentQ.justification_prompt}
+                <label className="text-sm font-medium mb-2 block" style={{ color: primaryColor }}>
+                  ✎ {currentQ.justification_prompt} <span className="text-red-500">*</span>
                 </label>
                 <Textarea
                   value={justifications[currentQ.id] || ''}
                   onChange={e => setJustifications(j => ({ ...j, [currentQ.id]: e.target.value }))}
-                  placeholder="Opcional – sua justificativa enriquece a análise..."
+                  placeholder="Justifique sua resposta... (obrigatório)"
                   className="min-h-[80px] text-sm"
                 />
+                {justifications[currentQ.id] !== undefined && justifications[currentQ.id].trim() === '' && (
+                  <p className="text-sm text-red-500 mt-2">A justificativa é obrigatória.</p>
+                )}
               </div>
             )}
           </div>
