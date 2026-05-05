@@ -266,7 +266,7 @@ export default function SurveyPage() {
   const allAnswered = questions.every(q => {
     const ans = answers[q.id];
     if (ans === undefined) return false;
-    if (q.question_type === 'open_text' && typeof ans === 'string' && ans.trim() === '') return false;
+    if ((q.question_type === 'open_text' || q.question_type === 'text') && typeof ans === 'string' && ans.trim() === '') return false;
     return true;
   });
   const currentQ = questions[currentIndex];
