@@ -390,7 +390,7 @@ export default function SurveyPage() {
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
               <h2 className="text-lg font-bold mb-2">Quem é seu líder de departamento?</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Selecione a liderança direta do seu departamento. Você avaliará esta pessoa e também os líderes empresariais.
+                Selecione a liderança direta do seu departamento.{survey?.leaders.some(l => l.type === 'company') ? ' Você avaliará esta pessoa e também os líderes empresariais.' : ' Você avaliará esta pessoa.'}
               </p>
 
               <div className="space-y-2">
