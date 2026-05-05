@@ -59,7 +59,7 @@ export type Database = {
           department_leadership: string | null
           email: string | null
           id: string
-          name: string
+          name: string | null
           responded_at: string | null
           status: string
           survey_id: string
@@ -73,7 +73,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
-          name: string
+          name?: string | null
           responded_at?: string | null
           status?: string
           survey_id: string
@@ -87,7 +87,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
-          name?: string
+          name?: string | null
           responded_at?: string | null
           status?: string
           survey_id?: string
