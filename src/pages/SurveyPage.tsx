@@ -157,8 +157,8 @@ export default function SurveyPage() {
         value: typeof ans === 'number' ? ans : null,
         text_value: typeof ans === 'string' ? ans : justification,
         department: respondent.department,
-        company_leadership: respondent.company_leadership,
-        department_leadership: selectedLeader || respondent.department_leadership,
+        company_leadership: selectedCompanyLeader || respondent.company_leadership,
+        department_leadership: selectedDeptLeader || respondent.department_leadership,
       };
     }).filter(r => r.value !== null || r.text_value !== null);
 
