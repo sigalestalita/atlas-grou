@@ -117,10 +117,7 @@ export default function SurveyPage() {
   };
 
   const handleLeaderConfirm = () => {
-    const companyLeaders = typedLeaders.filter(l => l.type === 'company');
-    const deptLeaders = typedLeaders.filter(l => l.type === 'department');
-    if (companyLeaders.length > 0 && !selectedCompanyLeader) return;
-    if (deptLeaders.length > 0 && !selectedDeptLeader) return;
+    if (!selectedLeader) return;
     setStatus('ready');
   };
 
