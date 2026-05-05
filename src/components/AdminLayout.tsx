@@ -39,7 +39,7 @@ function AdminSidebar() {
           {!collapsed && <span className="font-semibold text-sm text-sidebar-foreground">Clima Org</span>}
         </div>
 
-        <SidebarGroup defaultOpen>
+        <SidebarGroup>
           <SidebarGroupLabel>{isSuperAdmin ? 'Administração' : 'Empresa'}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
