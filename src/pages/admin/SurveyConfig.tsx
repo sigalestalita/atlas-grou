@@ -203,23 +203,61 @@ export default function SurveyConfig() {
               <Users className="h-5 w-5" />
               Lideranças
             </CardTitle>
-            <p className="text-sm text-muted-foreground">Configure as lideranças que o respondente poderá selecionar antes de iniciar a pesquisa.</p>
+            <p className="text-sm text-muted-foreground">Configure as lideranças (empresarial ou de departamento) que o respondente poderá selecionar.</p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {leaders.map((leader, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                <span className="text-sm">{leader}</span>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
-                  <X className="h-4 w-4 text-destructive" />
-                </Button>
+          <CardContent className="space-y-4">
+            {/* Company leaders */}
+            {leaders.filter(l => l.type === 'company').length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Liderança Empresarial</span>
+                </div>
+                {leaders.map((leader, i) => leader.type === 'company' && (
+                  <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg mb-1">
+                    <span className="text-sm">{leader.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Department leaders */}
+            {leaders.filter(l => l.type === 'department').length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <UserCheck className="h-4 w-4 text-orange-500" />
+                  <span className="text-sm font-medium">Liderança de Departamento</span>
+                </div>
+                {leaders.map((leader, i) => leader.type === 'department' && (
+                  <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg mb-1">
+                    <span className="text-sm">{leader.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
+              <Select onValueChange={(v: string) => setNewLeaderType(v as 'company' | 'department')} value={newLeaderType}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Empresarial</SelectItem>
+                  <SelectItem value="department">Departamento</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 value={newLeader}
                 onChange={e => setNewLeader(e.target.value)}
-                placeholder="Ex: Aline Néglia – Administrativo"
+                placeholder="Nome da liderança"
                 onKeyDown={e => e.key === 'Enter' && addLeader()}
+                className="flex-1"
               />
               <Button onClick={addLeader} size="sm">Adicionar</Button>
             </div>
