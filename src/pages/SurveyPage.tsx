@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield, Users } from 'lucide-react';
+import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield, Users, UserX } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -25,7 +25,7 @@ interface SurveyData {
   scale_min: number;
   scale_max: number;
   scale_labels: string[];
-  leaders: string[];
+  leaders: { name: string; type: 'company' | 'department' }[];
 }
 
 interface CompanyBranding {
@@ -40,6 +40,8 @@ interface EvaluationRound {
   completed: boolean;
 }
 
+type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'round_done' | 'done' | 'no_evaluation';
+
 const SCALE_LABELS: Record<string, string[]> = {
   avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
   satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
@@ -51,7 +53,7 @@ const SCALE_LABELS: Record<string, string[]> = {
 
 export default function SurveyPage() {
   const { slug, token } = useParams();
-  const [status, setStatus] = useState<'loading' | 'round_intro' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'round_done' | 'done'>('loading');
+  const [status, setStatus] = useState<SurveyStatus>('loading');
   const [survey, setSurvey] = useState<SurveyData | null>(null);
   const [branding, setBranding] = useState<CompanyBranding | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -63,6 +65,10 @@ export default function SurveyPage() {
   // Multi-round evaluation state
   const [evaluationRounds, setEvaluationRounds] = useState<EvaluationRound[]>([]);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+
+  // Department leader selection
+  const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
+  const [respondentRole, setRespondentRole] = useState<'collaborator' | 'department_leader' | 'company_leader'>('collaborator');
 
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
@@ -86,7 +92,17 @@ export default function SurveyPage() {
       labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
-    setSurvey({ ...surveyData, scale_labels: labels, leaders: [] } as any);
+    // Parse leaders
+    let leaders: { name: string; type: 'company' | 'department' }[] = [];
+    try {
+      const raw = surveyData.leaders;
+      if (Array.isArray(raw)) {
+        leaders = raw.map((l: any) => ({ name: l.name || l, type: l.type || 'company' }));
+      }
+    } catch { leaders = []; }
+
+    const surveyParsed: SurveyData = { ...surveyData, scale_labels: labels, leaders } as any;
+    setSurvey(surveyParsed);
 
     // Load questions
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
@@ -108,24 +124,58 @@ export default function SurveyPage() {
     }
     setQuestions(allQuestions);
 
-    // Load evaluation assignments for this respondent
-    const { data: assignmentsData } = await supabase
-      .from('evaluation_assignments')
-      .select('evaluatee_name')
-      .eq('survey_id', surveyData.id)
-      .eq('evaluator_name', resp.name);
+    // Determine respondent role based on leaders list
+    const companyLeaders = leaders.filter(l => l.type === 'company');
+    const deptLeaders = leaders.filter(l => l.type === 'department');
+    const respondentName = resp.name?.trim().toLowerCase() || '';
 
-    const leaders = (assignmentsData || []).map(a => a.evaluatee_name);
+    const isCompanyLeader = companyLeaders.some(l => l.name.trim().toLowerCase() === respondentName);
+    const isDeptLeader = deptLeaders.some(l => l.name.trim().toLowerCase() === respondentName);
 
-    if (leaders.length > 0) {
-      setEvaluationRounds(leaders.map(l => ({ leaderName: l, completed: false })));
+    if (isCompanyLeader) {
+      setRespondentRole('company_leader');
+      setStatus('no_evaluation');
+      return;
+    }
+
+    if (isDeptLeader) {
+      setRespondentRole('department_leader');
+      // Dept leaders evaluate only company leaders
+      const rounds = companyLeaders.map(l => ({ leaderName: l.name, completed: false }));
+      setEvaluationRounds(rounds);
       setCurrentRoundIndex(0);
       setStatus('round_intro');
-    } else {
-      // No assignments - single round without leader
-      setEvaluationRounds([]);
-      setStatus('ready');
+      return;
     }
+
+    // Collaborator: needs to pick their department leader first
+    setRespondentRole('collaborator');
+    if (deptLeaders.length > 0) {
+      setStatus('select_dept_leader');
+    } else {
+      // No dept leaders, just evaluate company leaders
+      const rounds = companyLeaders.map(l => ({ leaderName: l.name, completed: false }));
+      setEvaluationRounds(rounds);
+      setCurrentRoundIndex(0);
+      if (rounds.length > 0) {
+        setStatus('round_intro');
+      } else {
+        setStatus('ready');
+      }
+    }
+  };
+
+  const confirmDeptLeaderSelection = () => {
+    if (!selectedDeptLeader || !survey) return;
+    const companyLeaders = survey.leaders.filter(l => l.type === 'company');
+    // Rounds: selected dept leader first, then all company leaders
+    const rounds: EvaluationRound[] = [
+      { leaderName: selectedDeptLeader, completed: false },
+      ...companyLeaders.map(l => ({ leaderName: l.name, completed: false })),
+    ];
+    setEvaluationRounds(rounds);
+    setCurrentRoundIndex(0);
+    setStatus('round_intro');
   };
 
   const startRound = () => {
@@ -198,16 +248,13 @@ export default function SurveyPage() {
 
       const nextIncomplete = updatedRounds.findIndex((r, i) => i > currentRoundIndex && !r.completed);
       if (nextIncomplete !== -1) {
-        // More rounds to go
         setCurrentRoundIndex(nextIncomplete);
         setStatus('round_done');
       } else {
-        // All rounds done - mark respondent as responded
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
         setStatus('done');
       }
     } else {
-      // Single round (no assignments)
       await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
       setStatus('done');
     }
@@ -268,6 +315,102 @@ export default function SurveyPage() {
     );
   }
 
+  // Company leaders don't evaluate anyone
+  if (status === 'no_evaluation') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
+        <div className="text-center max-w-md animate-in fade-in duration-500">
+          <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
+            <UserX className="h-8 w-8" style={{ color: primaryColor }} />
+          </div>
+          <h1 className="text-2xl font-bold mb-3">Sem avaliações pendentes</h1>
+          <p className="text-muted-foreground">
+            Como liderança empresarial, você não possui avaliações para responder nesta pesquisa.
+          </p>
+          {branding && <p className="mt-6 text-sm text-muted-foreground">{branding.name}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // Department leader selection screen for collaborators
+  if (status === 'select_dept_leader') {
+    const deptLeaders = survey?.leaders.filter(l => l.type === 'department') || [];
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
+        <header className="p-4 flex items-center gap-3 border-b bg-white/80 backdrop-blur-sm">
+          {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
+          <span className="font-semibold text-sm">{branding?.name}</span>
+        </header>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg animate-in fade-in duration-500">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
+                <Users className="h-8 w-8" style={{ color: primaryColor }} />
+              </div>
+              <h1 className="text-2xl font-bold mb-2">{survey?.title}</h1>
+              {survey?.description && <p className="text-muted-foreground mb-4">{survey.description}</p>}
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-6">
+                <Clock className="h-4 w-4" />
+                <span>~{estimatedMinutes} min no total</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
+              <h2 className="text-lg font-bold mb-2">Quem é seu líder de departamento?</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Selecione a liderança direta do seu departamento. Você avaliará esta pessoa e também os líderes empresariais.
+              </p>
+
+              <div className="space-y-2">
+                {deptLeaders.map(leader => {
+                  const isSelected = selectedDeptLeader === leader.name;
+                  return (
+                    <button
+                      key={leader.name}
+                      onClick={() => setSelectedDeptLeader(leader.name)}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
+                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10` } : {}}
+                    >
+                      <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? '' : 'border-gray-300'
+                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                      </span>
+                      <span className="font-medium" style={isSelected ? { color: primaryColor } : {}}>{leader.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="text-center">
+              <Button
+                onClick={confirmDeptLeaderSelection}
+                disabled={!selectedDeptLeader}
+                style={{ backgroundColor: primaryColor }}
+                className="text-white px-8"
+                size="lg"
+              >
+                Continuar <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
+                <Shield className="h-3 w-3" />
+                Sua seleção não será vinculada às suas respostas
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (status === 'done') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}10, ${secondaryColor}10)` }}>
@@ -289,7 +432,7 @@ export default function SurveyPage() {
     );
   }
 
-  // Round intro screen - shows who they're about to evaluate
+  // Round intro screen
   if (status === 'round_intro') {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
@@ -377,6 +520,8 @@ export default function SurveyPage() {
 
   // Between-rounds screen
   if (status === 'round_done') {
+    const prevRoundIndex = evaluationRounds.findIndex((r, i) => i < currentRoundIndex && r.completed);
+    const lastCompletedName = evaluationRounds.filter(r => r.completed).pop()?.leaderName || '';
     return (
       <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
         <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
@@ -391,7 +536,7 @@ export default function SurveyPage() {
             <CheckCircle className="h-16 w-16 mx-auto mb-4" style={{ color: primaryColor }} />
             <h2 className="text-2xl font-bold mb-2">Avaliação concluída!</h2>
             <p className="text-muted-foreground mb-6">
-              Você concluiu a avaliação de <strong>{evaluationRounds[currentRoundIndex - 1 >= 0 ? currentRoundIndex - 1 : 0]?.leaderName}</strong>.
+              Você concluiu a avaliação de <strong>{lastCompletedName}</strong>.
             </p>
 
             <div className="flex justify-center gap-2 mb-6">
