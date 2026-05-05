@@ -26,7 +26,31 @@ export default function SurveyConfig() {
   const [sections, setSections] = useState<any[]>([]);
   const [newSection, setNewSection] = useState('');
   const [newQuestions, setNewQuestions] = useState<Record<string, string>>({});
+  const [newLeader, setNewLeader] = useState('');
   const { toast } = useToast();
+
+  const leaders: string[] = (() => {
+    if (!selected?.leaders) return [];
+    try {
+      return typeof selected.leaders === 'string' ? JSON.parse(selected.leaders) : Array.isArray(selected.leaders) ? selected.leaders : [];
+    } catch { return []; }
+  })();
+
+  const addLeader = async () => {
+    if (!newLeader.trim() || !selected) return;
+    const updated = [...leaders, newLeader.trim()];
+    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    setSelected({ ...selected, leaders: updated });
+    setNewLeader('');
+    toast({ title: 'Liderança adicionada' });
+  };
+
+  const removeLeader = async (index: number) => {
+    if (!selected) return;
+    const updated = leaders.filter((_, i) => i !== index);
+    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    setSelected({ ...selected, leaders: updated });
+  };
 
   const load = async () => {
     if (!companyId) return;
