@@ -21,6 +21,7 @@ import Links from "@/pages/admin/Links";
 import ProgressPage from "@/pages/admin/Progress";
 import ExportPage from "@/pages/admin/Export";
 import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
+import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
 
               {/* Super Admin routes */}
               <Route path="companies" element={<RequireSuperAdmin><Companies /></RequireSuperAdmin>} />
+              <Route path="analytics" element={<RequireSuperAdmin><PlatformAnalytics /></RequireSuperAdmin>} />
               <Route path="templates" element={<RequireSuperAdmin><Templates /></RequireSuperAdmin>} />
               <Route path="users" element={<RequireSuperAdmin><AdminUsers /></RequireSuperAdmin>} />
 

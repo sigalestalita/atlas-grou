@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 
 const superAdminItems = [
   { title: 'Empresas', url: '/admin/companies', icon: Building2 },
+  { title: 'Analítico', url: '/admin/analytics', icon: BarChart3 },
   { title: 'Templates', url: '/admin/templates', icon: FileText },
 ];
 

@@ -70,7 +70,7 @@ export default function Dashboard() {
     const { data: questions } = await supabase.from('survey_questions').select('id, text, section_id, sort_order, question_type').in('section_id', (sections || []).map(s => s.id)).order('sort_order');
     const scaleQuestions = (questions || []).filter(q => q.question_type === 'scale');
 
-    const { data: responses } = await supabase.from('survey_responses').select('question_id, value, department, company_leadership').eq('survey_id', survey.id);
+    const { data: responses } = await supabase.from('survey_responses').select('question_id, value, department, company_leadership, evaluated_leader').eq('survey_id', survey.id);
     if (!responses || responses.length === 0) return;
 
     // Question averages
@@ -104,17 +104,18 @@ export default function Dashboard() {
       .sort((a, b) => b.avg - a.avg);
     setDeptAvgs(dAvgs);
 
-    // Leadership averages & detailed breakdown (min 3)
+    // Leadership averages & detailed breakdown (min 3) - use evaluated_leader first, fallback to company_leadership
     const leadMap = new Map<string, number[]>();
     const leadQuestionMap = new Map<string, Map<string, number[]>>();
     responses.forEach(r => {
-      if (!r.company_leadership || r.value == null) return;
-      const arr = leadMap.get(r.company_leadership) || [];
+      const leader = r.evaluated_leader || r.company_leadership;
+      if (!leader || r.value == null) return;
+      const arr = leadMap.get(leader) || [];
       arr.push(r.value);
-      leadMap.set(r.company_leadership, arr);
+      leadMap.set(leader, arr);
 
-      if (!leadQuestionMap.has(r.company_leadership)) leadQuestionMap.set(r.company_leadership, new Map());
-      const qm = leadQuestionMap.get(r.company_leadership)!;
+      if (!leadQuestionMap.has(leader)) leadQuestionMap.set(leader, new Map());
+      const qm = leadQuestionMap.get(leader)!;
       const qarr = qm.get(r.question_id) || [];
       qarr.push(r.value);
       qm.set(r.question_id, qarr);
