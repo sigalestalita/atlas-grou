@@ -33,10 +33,8 @@ function AdminSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent className="flex flex-col h-full">
         <div className="p-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
-            <BarChart3 className="h-4 w-4 text-sidebar-primary-foreground" />
-          </div>
-          {!collapsed && <span className="font-semibold text-sm text-sidebar-foreground">Clima Org</span>}
+          <img src="/logo.jpg" alt="Atlas" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" />
+          {!collapsed && <span className="font-semibold text-sm text-sidebar-foreground">Atlas</span>}
         </div>
 
         <SidebarGroup>
