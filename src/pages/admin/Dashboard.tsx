@@ -4,11 +4,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy, UserCheck, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy, UserCheck, ChevronDown, ChevronUp, Download, Filter } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExportReportDialog, { type ReportSection } from '@/components/ExportReportDialog';
 
 interface ContextType {
@@ -55,10 +56,20 @@ export default function Dashboard() {
   const [surveyTitle, setSurveyTitle] = useState('');
   const [companyBranding, setCompanyBranding] = useState<{ primary: string; secondary: string }>({ primary: '#ff5700', secondary: '#03104f' });
 
+  // Leader filter
+  const [availableLeaders, setAvailableLeaders] = useState<string[]>([]);
+  const [selectedLeaderFilter, setSelectedLeaderFilter] = useState<string>('all');
+
   useEffect(() => {
     if (!companyId) return;
     loadData();
   }, [companyId]);
+
+  // Reload charts when filter changes
+  useEffect(() => {
+    if (!companyId) return;
+    loadData();
+  }, [selectedLeaderFilter]);
 
   const loadData = async () => {
     // Load company info
@@ -74,18 +85,55 @@ export default function Dashboard() {
     setScaleMax(survey.scale_max);
     setSurveyTitle(survey.title);
 
-    const { data: respondents } = await supabase.from('respondents').select('status').eq('survey_id', survey.id);
-    const total = respondents?.length || 0;
-    const responded = respondents?.filter(r => r.status === 'responded').length || 0;
-    const rate = total > 0 ? Math.round((responded / total) * 100) : 0;
-    setStats({ total, responded, rate });
+    // Extract available leaders from survey config
+    const leaders: { name: string; type: string }[] = (() => {
+      if (!survey.leaders) return [];
+      try {
+        const raw = typeof survey.leaders === 'string' ? JSON.parse(survey.leaders) : Array.isArray(survey.leaders) ? survey.leaders : [];
+        return raw.map((l: any) => typeof l === 'string' ? { name: l, type: 'company' } : l);
+      } catch { return []; }
+    })();
+    setAvailableLeaders(leaders.map(l => l.name));
+
+    // Compute stats: for open-access surveys, count from survey_responses; otherwise from respondents
+    if (survey.open_access) {
+      // Count unique submissions by distinct submitted_at timestamps
+      const { data: allResponses } = await supabase
+        .from('survey_responses')
+        .select('submitted_at, evaluated_leader')
+        .eq('survey_id', survey.id);
+
+      const uniqueSubmissions = new Set((allResponses || []).map(r => `${r.submitted_at}_${r.evaluated_leader || ''}`));
+      const responded = uniqueSubmissions.size;
+      // For open-access, no fixed "total" — just show responded
+      setStats({ total: responded, responded, rate: responded > 0 ? 100 : 0 });
+    } else {
+      const { data: respondents } = await supabase.from('respondents').select('status').eq('survey_id', survey.id);
+      const total = respondents?.length || 0;
+      const responded = respondents?.filter(r => r.status === 'responded').length || 0;
+      const rate = total > 0 ? Math.round((responded / total) * 100) : 0;
+      setStats({ total, responded, rate });
+    }
 
     const { data: sections } = await supabase.from('survey_sections').select('id, title, sort_order').eq('survey_id', survey.id).order('sort_order');
     const { data: questions } = await supabase.from('survey_questions').select('id, text, section_id, sort_order, question_type').in('section_id', (sections || []).map(s => s.id)).order('sort_order');
     const scaleQuestions = (questions || []).filter(q => q.question_type === 'scale');
 
-    const { data: responses } = await supabase.from('survey_responses').select('question_id, value, department, company_leadership, evaluated_leader').eq('survey_id', survey.id);
-    if (!responses || responses.length === 0) return;
+    // Load responses with optional leader filter
+    let responseQuery = supabase.from('survey_responses').select('question_id, value, department, company_leadership, evaluated_leader, department_leadership').eq('survey_id', survey.id);
+    if (selectedLeaderFilter && selectedLeaderFilter !== 'all') {
+      responseQuery = responseQuery.eq('evaluated_leader', selectedLeaderFilter);
+    }
+    const { data: responses } = await responseQuery;
+
+    if (!responses || responses.length === 0) {
+      setQuestionAvgs([]);
+      setDeptAvgs([]);
+      setLeaderAvgs([]);
+      setLeaderDetails([]);
+      setOverallScore(0);
+      return;
+    }
 
     // Question averages
     const qMap = new Map<string, number[]>();
@@ -118,7 +166,7 @@ export default function Dashboard() {
       .sort((a, b) => b.avg - a.avg);
     setDeptAvgs(dAvgs);
 
-    // Leadership averages & detailed breakdown (min 3) - use evaluated_leader first, fallback to company_leadership
+    // Leadership averages & detailed breakdown (min 3)
     const leadMap = new Map<string, number[]>();
     const leadQuestionMap = new Map<string, Map<string, number[]>>();
     responses.forEach(r => {
@@ -263,9 +311,30 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Export button */}
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={() => setShowExport(true)} className="flex items-center gap-2">
+      {/* Export button + Leader filter */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        {availableLeaders.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedLeaderFilter} onValueChange={setSelectedLeaderFilter}>
+              <SelectTrigger className="w-72">
+                <SelectValue placeholder="Filtrar por liderança..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as lideranças</SelectItem>
+                {availableLeaders.map(l => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedLeaderFilter !== 'all' && (
+              <Badge variant="secondary" className="text-xs">
+                Filtrando: {selectedLeaderFilter}
+              </Badge>
+            )}
+          </div>
+        )}
+        <Button variant="outline" onClick={() => setShowExport(true)} className="flex items-center gap-2 ml-auto">
           <Download className="h-4 w-4" />
           Exportar Relatório
         </Button>
