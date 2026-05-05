@@ -2,13 +2,37 @@ import { useEffect, useState } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, RadialBarChart, RadialBar } from 'recharts';
-import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { TrendingUp, TrendingDown, Users, CheckCircle, AlertTriangle, Trophy, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 interface ContextType {
   company: { id: string; name: string; primary_color: string };
 }
+
+interface LeaderDetail {
+  name: string;
+  avg: number;
+  count: number;
+  score: number;
+  questionAvgs: { question: string; questionFull: string; avg: number; section: string }[];
+  strengths: { question: string; avg: number }[];
+  weaknesses: { question: string; avg: number }[];
+}
+
+const LEADER_COLORS = [
+  'hsl(210, 79%, 46%)',
+  'hsl(152, 60%, 42%)',
+  'hsl(280, 60%, 50%)',
+  'hsl(38, 92%, 50%)',
+  'hsl(350, 65%, 50%)',
+  'hsl(180, 60%, 40%)',
+  'hsl(30, 80%, 50%)',
+  'hsl(240, 50%, 55%)',
+];
 
 export default function Dashboard() {
   const params = useParams();
@@ -20,8 +44,10 @@ export default function Dashboard() {
   const [questionAvgs, setQuestionAvgs] = useState<{ name: string; avg: number; section: string }[]>([]);
   const [deptAvgs, setDeptAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderAvgs, setLeaderAvgs] = useState<{ name: string; avg: number }[]>([]);
+  const [leaderDetails, setLeaderDetails] = useState<LeaderDetail[]>([]);
   const [overallScore, setOverallScore] = useState(0);
   const [scaleMax, setScaleMax] = useState(5);
+  const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
@@ -29,36 +55,34 @@ export default function Dashboard() {
   }, [companyId]);
 
   const loadData = async () => {
-    // Get active survey
     const { data: surveys } = await supabase.from('surveys').select('*').eq('company_id', companyId).in('status', ['active', 'closed']).limit(1);
     const survey = surveys?.[0];
     if (!survey) return;
     setScaleMax(survey.scale_max);
 
-    // Response rate
     const { data: respondents } = await supabase.from('respondents').select('status').eq('survey_id', survey.id);
     const total = respondents?.length || 0;
     const responded = respondents?.filter(r => r.status === 'responded').length || 0;
     const rate = total > 0 ? Math.round((responded / total) * 100) : 0;
     setStats({ total, responded, rate });
 
-    // Get questions with sections
     const { data: sections } = await supabase.from('survey_sections').select('id, title, sort_order').eq('survey_id', survey.id).order('sort_order');
-    const { data: questions } = await supabase.from('survey_questions').select('id, text, section_id, sort_order').in('section_id', (sections || []).map(s => s.id)).order('sort_order');
+    const { data: questions } = await supabase.from('survey_questions').select('id, text, section_id, sort_order, question_type').in('section_id', (sections || []).map(s => s.id)).order('sort_order');
+    const scaleQuestions = (questions || []).filter(q => q.question_type === 'scale');
 
-    // Get responses
     const { data: responses } = await supabase.from('survey_responses').select('question_id, value, department, company_leadership').eq('survey_id', survey.id);
     if (!responses || responses.length === 0) return;
 
     // Question averages
     const qMap = new Map<string, number[]>();
     responses.forEach(r => {
+      if (r.value == null) return;
       const arr = qMap.get(r.question_id) || [];
       arr.push(r.value);
       qMap.set(r.question_id, arr);
     });
 
-    const qAvgs = (questions || []).map(q => {
+    const qAvgs = scaleQuestions.map(q => {
       const vals = qMap.get(q.id) || [];
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
       const section = sections?.find(s => s.id === q.section_id)?.title || '';
@@ -66,10 +90,10 @@ export default function Dashboard() {
     });
     setQuestionAvgs(qAvgs);
 
-    // Department averages (min 3 anonymity)
+    // Department averages (min 3)
     const deptMap = new Map<string, number[]>();
     responses.forEach(r => {
-      if (!r.department) return;
+      if (!r.department || r.value == null) return;
       const arr = deptMap.get(r.department) || [];
       arr.push(r.value);
       deptMap.set(r.department, arr);
@@ -80,22 +104,59 @@ export default function Dashboard() {
       .sort((a, b) => b.avg - a.avg);
     setDeptAvgs(dAvgs);
 
-    // Leadership averages (min 3)
+    // Leadership averages & detailed breakdown (min 3)
     const leadMap = new Map<string, number[]>();
+    const leadQuestionMap = new Map<string, Map<string, number[]>>();
     responses.forEach(r => {
-      if (!r.company_leadership) return;
+      if (!r.company_leadership || r.value == null) return;
       const arr = leadMap.get(r.company_leadership) || [];
       arr.push(r.value);
       leadMap.set(r.company_leadership, arr);
+
+      if (!leadQuestionMap.has(r.company_leadership)) leadQuestionMap.set(r.company_leadership, new Map());
+      const qm = leadQuestionMap.get(r.company_leadership)!;
+      const qarr = qm.get(r.question_id) || [];
+      qarr.push(r.value);
+      qm.set(r.question_id, qarr);
     });
+
     const lAvgs = Array.from(leadMap.entries())
       .filter(([_, vals]) => vals.length >= 3)
       .map(([name, vals]) => ({ name, avg: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 }))
       .sort((a, b) => b.avg - a.avg);
     setLeaderAvgs(lAvgs);
 
-    // Overall score (0-100)
-    const allVals = responses.map(r => r.value);
+    // Detailed leader data
+    const details: LeaderDetail[] = lAvgs.map(l => {
+      const vals = leadMap.get(l.name)!;
+      const qm = leadQuestionMap.get(l.name)!;
+      const questionAvgsForLeader = scaleQuestions.map(q => {
+        const qVals = qm.get(q.id) || [];
+        const avg = qVals.length > 0 ? qVals.reduce((a, b) => a + b, 0) / qVals.length : 0;
+        const section = sections?.find(s => s.id === q.section_id)?.title || '';
+        return {
+          question: q.text.substring(0, 35) + (q.text.length > 35 ? '...' : ''),
+          questionFull: q.text,
+          avg: Math.round(avg * 100) / 100,
+          section
+        };
+      }).filter(q => q.avg > 0);
+
+      const sorted = [...questionAvgsForLeader].sort((a, b) => a.avg - b.avg);
+      return {
+        name: l.name,
+        avg: l.avg,
+        count: new Set(vals).size > 0 ? Math.round(vals.length / scaleQuestions.length) : vals.length,
+        score: Math.round((l.avg / survey.scale_max) * 100),
+        questionAvgs: questionAvgsForLeader,
+        strengths: sorted.slice(-3).reverse(),
+        weaknesses: sorted.slice(0, 3),
+      };
+    });
+    setLeaderDetails(details);
+
+    // Overall score
+    const allVals = responses.filter(r => r.value != null).map(r => r.value!);
     const rawAvg = allVals.reduce((a, b) => a + b, 0) / allVals.length;
     const score = Math.round((rawAvg / survey.scale_max) * 100);
     setOverallScore(score);
@@ -122,6 +183,18 @@ export default function Dashboard() {
   };
 
   const { weak, strong } = insights();
+
+  // Build radar data for leader comparison
+  const radarData = questionAvgs.length > 0 && leaderDetails.length > 0
+    ? questionAvgs.slice(0, 8).map(q => {
+        const entry: Record<string, string | number> = { question: q.name };
+        leaderDetails.forEach(l => {
+          const match = l.questionAvgs.find(lq => lq.question === q.name || q.name.startsWith(lq.question.substring(0, 30)));
+          entry[l.name] = match?.avg || 0;
+        });
+        return entry;
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -177,7 +250,6 @@ export default function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Question Averages */}
         <Card>
           <CardHeader><CardTitle className="text-lg">Média por Pergunta</CardTitle></CardHeader>
           <CardContent>
@@ -197,7 +269,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Department Averages */}
         <Card>
           <CardHeader><CardTitle className="text-lg">Média por Departamento</CardTitle></CardHeader>
           <CardContent>
@@ -218,22 +289,157 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Leadership Comparison */}
-      {leaderAvgs.length > 0 && (
+      {/* ===== LEADERSHIP METRICS PANEL ===== */}
+      {leaderDetails.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-lg">Comparação entre Lideranças</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-primary" />
+              <CardTitle className="text-lg">Painel de Métricas por Liderança</CardTitle>
+            </div>
+            <CardDescription>Comparação detalhada entre lideranças imediatas (mín. 3 respostas por grupo)</CardDescription>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={leaderAvgs}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis domain={[0, scaleMax]} />
-                <Tooltip />
-                <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
-                  {leaderAvgs.map((entry, i) => <Cell key={i} fill={getBarColor(entry.avg)} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+                <TabsTrigger value="comparison">Comparativo por Pergunta</TabsTrigger>
+                {radarData.length > 0 && <TabsTrigger value="radar">Radar</TabsTrigger>}
+                <TabsTrigger value="detail">Detalhamento</TabsTrigger>
+              </TabsList>
+
+              {/* Overview Tab */}
+              <TabsContent value="overview">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {leaderDetails.map((leader, idx) => (
+                    <Card key={leader.name} className="border">
+                      <CardContent className="pt-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: LEADER_COLORS[idx % LEADER_COLORS.length] }} />
+                            <span className="font-semibold text-sm">{leader.name}</span>
+                          </div>
+                          <Badge variant={leader.score >= 75 ? 'default' : leader.score >= 50 ? 'secondary' : 'destructive'}>
+                            {leader.score}pts
+                          </Badge>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Score</span>
+                            <span>{leader.avg} / {scaleMax}</span>
+                          </div>
+                          <Progress value={leader.score} className="h-2" />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          ~{leader.count} avaliações
+                        </div>
+                        {leader.strengths.length > 0 && (
+                          <div className="pt-2 border-t space-y-1">
+                            <p className="text-xs font-medium text-green-700">Destaque positivo:</p>
+                            <p className="text-xs text-muted-foreground">{leader.strengths[0].question} ({leader.strengths[0].avg})</p>
+                          </div>
+                        )}
+                        {leader.weaknesses.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-red-700">Ponto de atenção:</p>
+                            <p className="text-xs text-muted-foreground">{leader.weaknesses[0].question} ({leader.weaknesses[0].avg})</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+
+              {/* Comparison Tab - grouped bar chart */}
+              <TabsContent value="comparison">
+                <ResponsiveContainer width="100%" height={Math.max(400, questionAvgs.length * 50)}>
+                  <BarChart
+                    data={questionAvgs.map(q => {
+                      const entry: Record<string, string | number> = { name: q.name };
+                      leaderDetails.forEach(l => {
+                        const match = l.questionAvgs.find(lq => q.name.startsWith(lq.question.substring(0, 30)));
+                        entry[l.name] = match?.avg || 0;
+                      });
+                      return entry;
+                    })}
+                    layout="vertical"
+                    margin={{ left: 20, right: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" domain={[0, scaleMax]} />
+                    <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    {leaderDetails.map((l, idx) => (
+                      <Bar key={l.name} dataKey={l.name} fill={LEADER_COLORS[idx % LEADER_COLORS.length]} radius={[0, 2, 2, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </TabsContent>
+
+              {/* Radar Tab */}
+              {radarData.length > 0 && (
+                <TabsContent value="radar">
+                  <ResponsiveContainer width="100%" height={450}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="question" tick={{ fontSize: 9 }} />
+                      <PolarRadiusAxis domain={[0, scaleMax]} tick={{ fontSize: 10 }} />
+                      {leaderDetails.map((l, idx) => (
+                        <Radar
+                          key={l.name}
+                          name={l.name}
+                          dataKey={l.name}
+                          stroke={LEADER_COLORS[idx % LEADER_COLORS.length]}
+                          fill={LEADER_COLORS[idx % LEADER_COLORS.length]}
+                          fillOpacity={0.1}
+                        />
+                      ))}
+                      <Legend />
+                      <Tooltip />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </TabsContent>
+              )}
+
+              {/* Detail Tab - expandable per leader */}
+              <TabsContent value="detail" className="space-y-3">
+                {leaderDetails.map((leader, idx) => (
+                  <Card key={leader.name} className="border">
+                    <button
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-lg"
+                      onClick={() => setExpandedLeader(expandedLeader === leader.name ? null : leader.name)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: LEADER_COLORS[idx % LEADER_COLORS.length] }} />
+                        <span className="font-semibold text-sm">{leader.name}</span>
+                        <Badge variant="outline" className="text-xs">Score: {leader.score}</Badge>
+                      </div>
+                      {expandedLeader === leader.name ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {expandedLeader === leader.name && (
+                      <CardContent className="pt-0 space-y-2">
+                        <div className="grid gap-2">
+                          {leader.questionAvgs.map((q, qi) => (
+                            <div key={qi} className="flex items-center gap-3 py-1.5 border-b last:border-0">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs truncate" title={q.questionFull}>{q.questionFull}</p>
+                                <p className="text-[10px] text-muted-foreground">{q.section}</p>
+                              </div>
+                              <div className="w-24 flex items-center gap-2">
+                                <Progress value={(q.avg / scaleMax) * 100} className="h-1.5 flex-1" />
+                                <span className="text-xs font-mono font-bold w-8 text-right" style={{ color: getBarColor(q.avg) }}>{q.avg}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       )}
