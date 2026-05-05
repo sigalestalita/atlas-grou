@@ -220,7 +220,7 @@ export default function SurveyConfig() {
             </div>
           </CardContent>
         </Card>
-      )}
+      </>)}
 
       {surveys.length === 0 && <Card><CardContent className="py-12 text-center text-muted-foreground">Selecione um template acima para criar sua pesquisa</CardContent></Card>}
     </div>
