@@ -72,9 +72,9 @@ export default function Respondents() {
   };
 
   const addManual = async () => {
-    if (!manualForm.name.trim() || !survey) return;
+    if (!survey) return;
     const { error } = await supabase.from('respondents').insert({
-      company_id: companyId!, survey_id: survey.id, name: manualForm.name.trim(),
+      company_id: companyId!, survey_id: survey.id, name: manualForm.name.trim() || '',
       email: manualForm.email.trim() || null, department: manualForm.department.trim() || null,
       company_leadership: manualForm.company_leadership.trim() || null,
       department_leadership: manualForm.department_leadership.trim() || null,
@@ -120,7 +120,7 @@ export default function Respondents() {
         <CardHeader><CardTitle className="text-sm">Adicionar manualmente</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-3 md:grid-cols-6">
-            <Input placeholder="Nome *" value={manualForm.name} onChange={e => setManualForm(f => ({ ...f, name: e.target.value }))} />
+            <Input placeholder="Nome (opcional)" value={manualForm.name} onChange={e => setManualForm(f => ({ ...f, name: e.target.value }))} />
             <Input placeholder="Email" value={manualForm.email} onChange={e => setManualForm(f => ({ ...f, email: e.target.value }))} />
             <Input placeholder="Departamento" value={manualForm.department} onChange={e => setManualForm(f => ({ ...f, department: e.target.value }))} />
             <Input placeholder="Lid. Empresarial" value={manualForm.company_leadership} onChange={e => setManualForm(f => ({ ...f, company_leadership: e.target.value }))} />
