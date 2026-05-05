@@ -61,10 +61,18 @@ export default function Dashboard() {
   }, [companyId]);
 
   const loadData = async () => {
+    // Load company info
+    const { data: companyData } = await supabase.from('companies').select('name, primary_color, secondary_color').eq('id', companyId).single();
+    if (companyData) {
+      setCompanyName(companyData.name);
+      setCompanyBranding({ primary: companyData.primary_color, secondary: companyData.secondary_color });
+    }
+
     const { data: surveys } = await supabase.from('surveys').select('*').eq('company_id', companyId).in('status', ['active', 'closed']).limit(1);
     const survey = surveys?.[0];
     if (!survey) return;
     setScaleMax(survey.scale_max);
+    setSurveyTitle(survey.title);
 
     const { data: respondents } = await supabase.from('respondents').select('status').eq('survey_id', survey.id);
     const total = respondents?.length || 0;
