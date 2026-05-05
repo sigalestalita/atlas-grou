@@ -211,8 +211,75 @@ export default function Dashboard() {
       })
     : [];
 
+  // Build report sections for export
+  const buildReportSections = (): ReportSection[] => {
+    const result: ReportSection[] = [];
+    result.push({
+      key: 'kpis', label: 'Indicadores Gerais (KPIs)', description: 'Score geral, taxa de resposta e totais',
+      data: { headers: ['Indicador', 'Valor'], rows: [
+        ['Score Geral', `${overallScore}pts`], ['Taxa de Resposta', `${stats.rate}%`],
+        ['Total de Colaboradores', stats.total], ['Respondidos', stats.responded], ['Pendentes', stats.total - stats.responded],
+      ]},
+    });
+    if (questionAvgs.length > 0) {
+      result.push({
+        key: 'questions', label: 'Média por Pergunta', description: 'Média de cada pergunta da pesquisa',
+        data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.name, q.section, q.avg]) },
+      });
+    }
+    if (deptAvgs.length > 0) {
+      result.push({
+        key: 'departments', label: 'Média por Departamento', description: 'Comparativo entre departamentos (mín. 3 respostas)',
+        data: { headers: ['Departamento', 'Média'], rows: deptAvgs.map(d => [d.name, d.avg]) },
+      });
+    }
+    if (leaderDetails.length > 0) {
+      result.push({
+        key: 'leaders_overview', label: 'Visão Geral por Liderança', description: 'Score e média de cada líder avaliado',
+        data: { headers: ['Líder', 'Média', 'Score', 'Avaliações', 'Destaque Positivo', 'Ponto de Atenção'], rows: leaderDetails.map(l => [
+          l.name, l.avg, `${l.score}pts`, `~${l.count}`,
+          l.strengths[0] ? `${l.strengths[0].question} (${l.strengths[0].avg})` : '-',
+          l.weaknesses[0] ? `${l.weaknesses[0].question} (${l.weaknesses[0].avg})` : '-',
+        ])},
+      });
+      for (const leader of leaderDetails) {
+        result.push({
+          key: `leader_${leader.name}`, label: `Detalhamento: ${leader.name}`, description: `Resultado por pergunta para ${leader.name}`,
+          data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: leader.questionAvgs.map(q => [q.questionFull, q.section, q.avg]) },
+        });
+      }
+    }
+    if (strong.length > 0 || weak.length > 0) {
+      result.push({
+        key: 'insights', label: 'Pontos Fortes e de Atenção', description: 'Top 3 melhores e piores resultados',
+        data: { headers: ['Tipo', 'Pergunta', 'Média'], rows: [
+          ...strong.map(q => ['✅ Ponto Forte', q.name, q.avg] as (string | number)[]),
+          ...weak.map(q => ['⚠️ Atenção', q.name, q.avg] as (string | number)[]),
+        ]},
+      });
+    }
+    return result;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Export button */}
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={() => setShowExport(true)} className="flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          Exportar Relatório
+        </Button>
+      </div>
+
+      <ExportReportDialog
+        open={showExport}
+        onOpenChange={setShowExport}
+        companyName={companyName || context?.company?.name || 'Empresa'}
+        surveyTitle={surveyTitle}
+        sections={buildReportSections()}
+        branding={{ primary: companyBranding.primary, secondary: companyBranding.secondary }}
+      />
+
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
