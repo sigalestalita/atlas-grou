@@ -11,8 +11,10 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, AlertTriangle, Users, CheckCircle, Building2, UserCheck,
-  Filter, ChevronDown, ChevronUp, Trophy, BarChart3,
+  Filter, ChevronDown, ChevronUp, Trophy, BarChart3, Download,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import ExportReportDialog, { type ReportSection } from '@/components/ExportReportDialog';
 
 interface Company { id: string; name: string; primary_color: string; }
 interface Survey { id: string; title: string; company_id: string; scale_max: number; status: string; }
@@ -42,6 +44,7 @@ export default function PlatformAnalytics() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showExport, setShowExport] = useState(false);
 
   // Load companies and surveys
   useEffect(() => {
@@ -283,9 +286,70 @@ export default function PlatformAnalytics() {
           </h1>
           <p className="text-sm text-muted-foreground">Visão consolidada de todas as empresas e pesquisas</p>
         </div>
+        <Button variant="outline" onClick={() => setShowExport(true)} className="flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          Exportar Relatório
+        </Button>
       </div>
 
-      {/* Filters */}
+      <ExportReportDialog
+        open={showExport}
+        onOpenChange={setShowExport}
+        companyName={selectedCompany !== 'all' ? (companies.find(c => c.id === selectedCompany)?.name || 'Plataforma') : 'Plataforma Geral'}
+        surveyTitle={selectedSurvey !== 'all' ? (surveys.find(s => s.id === selectedSurvey)?.title || 'Pesquisa') : 'Todas as Pesquisas'}
+        sections={(() => {
+          const result: ReportSection[] = [];
+          result.push({
+            key: 'kpis', label: 'Indicadores Gerais', description: 'Score, taxa de resposta e totais',
+            data: { headers: ['Indicador', 'Valor'], rows: [
+              ['Score Geral', `${kpis.score}pts`], ['Média', `${kpis.avg}/${scaleMax}`],
+              ['Taxa de Resposta', `${kpis.rate}%`], ['Respondidos', kpis.responded],
+              ['Total', kpis.total], ['Líderes Avaliados', leaderAvgs.length],
+            ]},
+          });
+          if (leaderAvgs.length > 0) {
+            result.push({
+              key: 'leaders', label: 'Ranking de Líderes Avaliados', description: 'Score e média por líder',
+              data: { headers: ['Líder', 'Média', 'Score', 'Respostas'], rows: leaderAvgs.map(l => [l.name, l.avg, `${l.score}pts`, l.count]) },
+            });
+          }
+          if (companyAvgs.length > 0) {
+            result.push({
+              key: 'companies', label: 'Comparativo por Empresa', description: 'Média por empresa',
+              data: { headers: ['Empresa', 'Média', 'Respostas'], rows: companyAvgs.map(c => [c.name, c.avg, c.count]) },
+            });
+          }
+          if (deptAvgs.length > 0) {
+            result.push({
+              key: 'departments', label: 'Comparativo por Departamento', description: 'Média por departamento (mín. 3)',
+              data: { headers: ['Departamento', 'Média'], rows: deptAvgs.map(d => [d.name, d.avg]) },
+            });
+          }
+          if (sectionAvgs.length > 0) {
+            result.push({
+              key: 'sections', label: 'Média por Categoria', description: 'Média por seção de perguntas',
+              data: { headers: ['Categoria', 'Média'], rows: sectionAvgs.map(s => [s.name, s.avg]) },
+            });
+          }
+          if (leaderSectionBreakdown.length > 0 && leaderAvgs.length > 0) {
+            result.push({
+              key: 'leader_sections', label: 'Detalhamento Líder × Categoria', description: 'Média de cada líder por categoria',
+              data: {
+                headers: ['Categoria', ...leaderAvgs.map(l => l.name)],
+                rows: leaderSectionBreakdown.map(entry => [
+                  entry.section as string,
+                  ...leaderAvgs.map(l => entry[l.name] as number),
+                ]),
+              },
+            });
+          }
+          return result;
+        })()}
+        branding={selectedCompany !== 'all'
+          ? { primary: companies.find(c => c.id === selectedCompany)?.primary_color || '#ff5700', secondary: '#03104f' }
+          : { primary: '#ff5700', secondary: '#03104f' }
+        }
+      />
       <Card>
         <CardContent className="pt-4">
           <div className="flex items-center gap-2 mb-3">
