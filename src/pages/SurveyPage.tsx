@@ -151,7 +151,7 @@ export default function SurveyPage() {
     }
 
     const { error } = await supabase.from('survey_responses').insert(responseRows);
-    if (error) { setStatus('ready'); return; }
+    if (error) { console.error('Submit error:', error); setStatus('ready'); return; }
 
     await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
     setStatus('done');
