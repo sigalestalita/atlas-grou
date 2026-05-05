@@ -50,6 +50,48 @@ export type Database = {
         }
         Relationships: []
       }
+      evaluation_assignments: {
+        Row: {
+          company_id: string
+          created_at: string
+          evaluatee_name: string
+          evaluator_name: string
+          id: string
+          survey_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          evaluatee_name: string
+          evaluator_name: string
+          id?: string
+          survey_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          evaluatee_name?: string
+          evaluator_name?: string
+          id?: string
+          survey_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluation_assignments_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       respondents: {
         Row: {
           company_id: string
