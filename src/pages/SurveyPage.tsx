@@ -90,7 +90,7 @@ export default function SurveyPage() {
     } catch { labels = []; }
 
     let leaders: LeaderObj[] = parseLeaders(surveyData.leaders);
-
+    setTypedLeaders(leaders);
     setSurvey({ ...surveyData, scale_labels: labels, leaders: leaders.map(l => l.name) } as any);
 
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
