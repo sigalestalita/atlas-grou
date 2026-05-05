@@ -11,7 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Play, Square, Trash2, Copy, Users, X, Building2, UserCheck } from 'lucide-react';
+import { Plus, Play, Square, Trash2, Copy, Users, X, Building2, UserCheck, Globe } from 'lucide-react';
 
 interface ContextType { company: { id: string } }
 
