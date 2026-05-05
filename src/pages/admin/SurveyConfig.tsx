@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Play, Square, Trash2, Copy, Users, X } from 'lucide-react';
+import { Plus, Play, Square, Trash2, Copy, Users, X, Building2, UserCheck } from 'lucide-react';
 
 interface ContextType { company: { id: string } }
 
@@ -27,19 +27,24 @@ export default function SurveyConfig() {
   const [newSection, setNewSection] = useState('');
   const [newQuestions, setNewQuestions] = useState<Record<string, string>>({});
   const [newLeader, setNewLeader] = useState('');
+  const [newLeaderType, setNewLeaderType] = useState<'company' | 'department'>('company');
   const { toast } = useToast();
 
-  const leaders: string[] = (() => {
+  interface Leader { name: string; type: 'company' | 'department' }
+
+  const leaders: Leader[] = (() => {
     if (!selected?.leaders) return [];
     try {
-      return typeof selected.leaders === 'string' ? JSON.parse(selected.leaders) : Array.isArray(selected.leaders) ? selected.leaders : [];
+      const raw = typeof selected.leaders === 'string' ? JSON.parse(selected.leaders) : Array.isArray(selected.leaders) ? selected.leaders : [];
+      // Migrate old string format to new object format
+      return raw.map((l: any) => typeof l === 'string' ? { name: l, type: 'company' as const } : l);
     } catch { return []; }
   })();
 
   const addLeader = async () => {
     if (!newLeader.trim() || !selected) return;
-    const updated = [...leaders, newLeader.trim()];
-    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    const updated = [...leaders, { name: newLeader.trim(), type: newLeaderType }];
+    await supabase.from('surveys').update({ leaders: updated as any }).eq('id', selected.id);
     setSelected({ ...selected, leaders: updated });
     setNewLeader('');
     toast({ title: 'Liderança adicionada' });
@@ -48,7 +53,7 @@ export default function SurveyConfig() {
   const removeLeader = async (index: number) => {
     if (!selected) return;
     const updated = leaders.filter((_, i) => i !== index);
-    await supabase.from('surveys').update({ leaders: updated }).eq('id', selected.id);
+    await supabase.from('surveys').update({ leaders: updated as any }).eq('id', selected.id);
     setSelected({ ...selected, leaders: updated });
   };
 
@@ -198,23 +203,61 @@ export default function SurveyConfig() {
               <Users className="h-5 w-5" />
               Lideranças
             </CardTitle>
-            <p className="text-sm text-muted-foreground">Configure as lideranças que o respondente poderá selecionar antes de iniciar a pesquisa.</p>
+            <p className="text-sm text-muted-foreground">Configure as lideranças (empresarial ou de departamento) que o respondente poderá selecionar.</p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {leaders.map((leader, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                <span className="text-sm">{leader}</span>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
-                  <X className="h-4 w-4 text-destructive" />
-                </Button>
+          <CardContent className="space-y-4">
+            {/* Company leaders */}
+            {leaders.filter(l => l.type === 'company').length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Liderança Empresarial</span>
+                </div>
+                {leaders.map((leader, i) => leader.type === 'company' && (
+                  <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg mb-1">
+                    <span className="text-sm">{leader.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Department leaders */}
+            {leaders.filter(l => l.type === 'department').length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <UserCheck className="h-4 w-4 text-orange-500" />
+                  <span className="text-sm font-medium">Liderança de Departamento</span>
+                </div>
+                {leaders.map((leader, i) => leader.type === 'department' && (
+                  <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg mb-1">
+                    <span className="text-sm">{leader.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeLeader(i)}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
+              <Select onValueChange={(v: string) => setNewLeaderType(v as 'company' | 'department')} value={newLeaderType}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Empresarial</SelectItem>
+                  <SelectItem value="department">Departamento</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 value={newLeader}
                 onChange={e => setNewLeader(e.target.value)}
-                placeholder="Ex: Aline Néglia – Administrativo"
+                placeholder="Nome da liderança"
                 onKeyDown={e => e.key === 'Enter' && addLeader()}
+                className="flex-1"
               />
               <Button onClick={addLeader} size="sm">Adicionar</Button>
             </div>
