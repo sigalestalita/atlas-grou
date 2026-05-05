@@ -56,6 +56,7 @@ export default function SurveyPage() {
   const [respondent, setRespondent] = useState<any>(null);
   const [selectedCompanyLeader, setSelectedCompanyLeader] = useState<string | null>(null);
   const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
+  const [typedLeaders, setTypedLeaders] = useState<LeaderObj[]>([]);
 
   interface LeaderObj { name: string; type: 'company' | 'department' }
 
