@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { BarChart3, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import logoAtlas from '@/assets/logo-atlas.jpg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -29,14 +30,14 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#041023' }}>
       <Card className="w-full max-w-md shadow-2xl border-0">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
-            <BarChart3 className="h-7 w-7 text-primary-foreground" />
+          <div className="mx-auto w-16 h-16 rounded-2xl overflow-hidden">
+            <img src={logoAtlas} alt="Atlas" className="w-full h-full object-cover" />
           </div>
           <div>
-            <CardTitle className="text-2xl">Pesquisa de Clima</CardTitle>
+            <CardTitle className="text-2xl">Atlas</CardTitle>
             <CardDescription className="mt-1">Acesse o painel administrativo</CardDescription>
           </div>
         </CardHeader>
