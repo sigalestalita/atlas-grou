@@ -45,7 +45,7 @@ type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' |
 const SCALE_LABELS: Record<string, string[]> = {
   avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
   satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
-  concordancia: ['Discordo Totalmente', 'Discordo', 'Neutro', 'Concordo', 'Concordo Totalmente'],
+  concordancia: ['Discordo totalmente', 'Discordo parcialmente', 'Neutro', 'Concordo parcialmente', 'Concordo totalmente'],
   frequencia: ['Nunca', 'Raramente', 'Às vezes', 'Frequentemente', 'Sempre'],
   confianca: ['Muito Baixo', 'Baixo', 'Moderado', 'Alto', 'Muito Alto'],
   alinhamento: ['Totalmente Desalinhado', 'Pouco Alinhado', 'Parcialmente', 'Bem Alinhado', 'Totalmente Alinhado'],
@@ -623,8 +623,36 @@ export default function SurveyPage() {
               {currentQ.text}
             </h2>
 
-            {/* Scale question */}
-            {currentQ.question_type === 'scale' && survey && (
+            {/* NPS question (0-10) */}
+            {currentQ.question_type === 'scale' && currentQ.scale_type === 'enps' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-11 gap-1">
+                  {Array.from({ length: 11 }, (_, i) => i).map(value => {
+                    const isSelected = answers[currentQ.id] === value;
+                    const bgColor = value <= 6 ? '#EF4444' : value <= 8 ? '#F59E0B' : '#22C55E';
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => handleScaleAnswer(value)}
+                        className={`p-3 rounded-lg border-2 text-center transition-all font-bold text-sm ${
+                          isSelected ? 'shadow-lg scale-105 text-white' : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                        style={isSelected ? { borderColor: bgColor, backgroundColor: bgColor } : {}}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground px-1">
+                  <span>Nada provável</span>
+                  <span>Extremamente provável</span>
+                </div>
+              </div>
+            )}
+
+            {/* Scale question (1-5) */}
+            {currentQ.question_type === 'scale' && currentQ.scale_type !== 'enps' && survey && (
               <div className="space-y-3">
                 {Array.from({ length: survey.scale_max - survey.scale_min + 1 }, (_, i) => survey.scale_min + i).map(value => {
                   const isSelected = answers[currentQ.id] === value;
@@ -644,7 +672,7 @@ export default function SurveyPage() {
                       }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor, color: 'white' } : {}}>
                         {value}
                       </span>
-                      {label && <span className="text-sm">{label}</span>}
+                      <span className="text-sm font-medium">{label}</span>
                     </button>
                   );
                 })}
