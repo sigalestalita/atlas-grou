@@ -11,8 +11,10 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, AlertTriangle, Users, CheckCircle, Building2, UserCheck,
-  Filter, ChevronDown, ChevronUp, Trophy, BarChart3,
+  Filter, ChevronDown, ChevronUp, Trophy, BarChart3, Download,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import ExportReportDialog, { type ReportSection } from '@/components/ExportReportDialog';
 
 interface Company { id: string; name: string; primary_color: string; }
 interface Survey { id: string; title: string; company_id: string; scale_max: number; status: string; }
@@ -42,6 +44,7 @@ export default function PlatformAnalytics() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showExport, setShowExport] = useState(false);
 
   // Load companies and surveys
   useEffect(() => {
