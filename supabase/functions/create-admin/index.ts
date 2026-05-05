@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
     }
 
     // Create user via admin API (auto-confirmed)
+    let userId: string;
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -83,9 +84,23 @@ Deno.serve(async (req) => {
     });
 
     if (createError) {
-      return new Response(JSON.stringify({ error: createError.message }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // If user already exists, look them up and assign the role
+      if (createError.message.includes("already been registered")) {
+        const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = users?.find((u: any) => u.email === email);
+        if (!existingUser || listError) {
+          return new Response(JSON.stringify({ error: "Usuário existe mas não foi possível localizá-lo" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        userId = existingUser.id;
+      } else {
+        return new Response(JSON.stringify({ error: createError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      userId = newUser.user.id;
     }
 
     // Assign role
