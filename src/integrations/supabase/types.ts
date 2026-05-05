@@ -247,6 +247,7 @@ export type Database = {
           description: string | null
           id: string
           is_template: boolean
+          leaders: Json | null
           scale_labels: Json | null
           scale_max: number
           scale_min: number
@@ -260,6 +261,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_template?: boolean
+          leaders?: Json | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
@@ -273,6 +275,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_template?: boolean
+          leaders?: Json | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
