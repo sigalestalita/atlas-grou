@@ -105,12 +105,13 @@ Deno.serve(async (req) => {
 
     // Assign role
     const { error: roleError } = await supabaseAdmin.from("user_roles").insert({
-      user_id: newUser.user.id,
+      user_id: userId,
       role,
       company_id: role === "company_admin" ? company_id : null,
     });
 
     if (roleError) {
+      return new Response(JSON.stringify({ error: roleError.message }), {
       // Cleanup: delete the created user
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
       return new Response(JSON.stringify({ error: roleError.message }), {
