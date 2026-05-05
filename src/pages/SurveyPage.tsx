@@ -678,7 +678,7 @@ export default function SurveyPage() {
             )}
 
             {/* Open text question */}
-            {currentQ.question_type === 'open_text' && (
+            {(currentQ.question_type === 'open_text' || currentQ.question_type === 'text') && (
               <div>
                 <Textarea
                   value={(answers[currentQ.id] as string) || ''}
