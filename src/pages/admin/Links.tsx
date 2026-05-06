@@ -40,7 +40,7 @@ export default function Links() {
 
   useEffect(() => { load(); }, [load]);
 
-  const baseUrl = window.location.origin;
+  const baseUrl = 'https://atlas.grougp.com.br';
 
   const getLink = (token: string) => `${baseUrl}/survey/${companySlug}/${token}`;
   const getOpenLink = () => `${baseUrl}/survey/${companySlug}`;
