@@ -93,7 +93,7 @@ export default function SurveyConfig() {
     // Copy sections and questions
     const { data: tmplSections } = await supabase.from('survey_sections').select('*').eq('survey_id', templateId).order('sort_order');
     for (const sec of tmplSections || []) {
-      const { data: newSec } = await supabase.from('survey_sections').insert({ survey_id: newSurvey.id, title: sec.title, sort_order: sec.sort_order }).select().single();
+      const { data: newSec } = await supabase.from('survey_sections').insert({ survey_id: newSurvey.id, title: sec.title, sort_order: sec.sort_order, section_type: (sec as any).section_type || 'organization' } as any).select().single();
       if (!newSec) continue;
       const { data: tmplQs } = await supabase.from('survey_questions').select('*').eq('section_id', sec.id).order('sort_order');
       for (const q of tmplQs || []) {
