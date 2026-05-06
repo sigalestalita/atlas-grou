@@ -11,6 +11,7 @@ interface Question {
   text: string;
   section_title: string;
   section_id: string;
+  section_type: string;
   question_type: string;
   scale_type: string | null;
   options: string[] | null;
@@ -36,7 +37,8 @@ interface CompanyBranding {
 }
 
 interface EvaluationRound {
-  leaderName: string;
+  leaderName: string | null; // null = org round
+  roundType: 'org' | 'leadership';
   completed: boolean;
 }
 
@@ -56,7 +58,7 @@ export default function SurveyPage() {
   const [status, setStatus] = useState<SurveyStatus>('loading');
   const [survey, setSurvey] = useState<SurveyData | null>(null);
   const [branding, setBranding] = useState<CompanyBranding | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
@@ -69,6 +71,12 @@ export default function SurveyPage() {
   // Department leader selection
   const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
   const [respondentRole, setRespondentRole] = useState<'collaborator' | 'department_leader' | 'company_leader'>('collaborator');
+
+  // Current round's questions
+  const currentRound = evaluationRounds[currentRoundIndex];
+  const questions = currentRound?.roundType === 'leadership'
+    ? allQuestions.filter(q => q.section_type === 'leadership')
+    : allQuestions.filter(q => q.section_type !== 'leadership');
 
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
@@ -83,7 +91,6 @@ export default function SurveyPage() {
     let resp: any = null;
 
     if (token) {
-      // Token-based access (individual respondent)
       const { data: respData } = await supabase.from('respondents').select('*').eq('token', token).single();
       if (!respData) { setStatus('invalid'); return; }
       if (respData.status === 'responded') { setStatus('already_responded'); return; }
@@ -93,11 +100,9 @@ export default function SurveyPage() {
       const { data: sd } = await supabase.from('surveys').select('*').eq('id', resp.survey_id).eq('status', 'active').single();
       surveyData = sd;
     } else {
-      // Open access (no token — anonymous volume survey)
       const { data: sd } = await supabase.from('surveys').select('*').eq('company_id', company.id).eq('status', 'active').eq('open_access', true).order('created_at', { ascending: false }).limit(1).single();
       surveyData = sd;
       if (surveyData) {
-        // Create a virtual respondent object for open access
         resp = { id: null, survey_id: surveyData.id, name: '', department: null, company_leadership: null, department_leadership: null };
         setRespondent(resp);
       }
@@ -110,7 +115,6 @@ export default function SurveyPage() {
       labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
-    // Parse leaders
     let leaders: { name: string; type: 'company' | 'department' }[] = [];
     try {
       const raw = surveyData.leaders;
@@ -122,9 +126,9 @@ export default function SurveyPage() {
     const surveyParsed: SurveyData = { ...surveyData, scale_labels: labels, leaders } as any;
     setSurvey(surveyParsed);
 
-    // Load questions
+    // Load questions with section_type
     const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
-    const allQuestions: Question[] = [];
+    const loadedQuestions: Question[] = [];
     for (const sec of sections || []) {
       const { data: qs } = await supabase.from('survey_questions').select('*').eq('section_id', sec.id).order('sort_order');
       (qs || []).forEach(q => {
@@ -132,17 +136,20 @@ export default function SurveyPage() {
         if (q.options) {
           try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options as string[]; } catch { opts = null; }
         }
-        allQuestions.push({
+        loadedQuestions.push({
           id: q.id, text: q.text, section_title: sec.title, section_id: sec.id,
+          section_type: (sec as any).section_type || 'organization',
           question_type: q.question_type, scale_type: q.scale_type,
           options: opts, has_justification: q.has_justification,
           justification_prompt: q.justification_prompt,
         });
       });
     }
-    setQuestions(allQuestions);
+    setAllQuestions(loadedQuestions);
 
-    // Determine respondent role based on leaders list
+    const hasLeadershipQuestions = loadedQuestions.some(q => q.section_type === 'leadership');
+
+    // Determine respondent role
     const companyLeaders = leaders.filter(l => l.type === 'company');
     const deptLeaders = leaders.filter(l => l.type === 'department');
     const respondentName = resp.name?.trim().toLowerCase() || '';
@@ -158,38 +165,49 @@ export default function SurveyPage() {
 
     if (isDeptLeader) {
       setRespondentRole('department_leader');
-      // Dept leaders evaluate only company leaders
-      const rounds = companyLeaders.map(l => ({ leaderName: l.name, completed: false }));
+      // Dept leaders: org questions first, then evaluate company leaders
+      const rounds: EvaluationRound[] = [
+        { leaderName: null, roundType: 'org', completed: false },
+        ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
+      ];
       setEvaluationRounds(rounds);
       setCurrentRoundIndex(0);
       setStatus('round_intro');
       return;
     }
 
-    // Collaborator: needs to pick their department leader first
+    // Collaborator
     setRespondentRole('collaborator');
-    if (deptLeaders.length > 0) {
+    if (deptLeaders.length > 0 && hasLeadershipQuestions) {
       setStatus('select_dept_leader');
-    } else {
-      // No dept leaders, just evaluate company leaders
-      const rounds = companyLeaders.map(l => ({ leaderName: l.name, completed: false }));
+    } else if (hasLeadershipQuestions && companyLeaders.length > 0) {
+      // No dept leaders, org + company leaders
+      const rounds: EvaluationRound[] = [
+        { leaderName: null, roundType: 'org', completed: false },
+        ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
+      ];
       setEvaluationRounds(rounds);
       setCurrentRoundIndex(0);
-      if (rounds.length > 0) {
-        setStatus('round_intro');
-      } else {
-        setStatus('ready');
-      }
+      setStatus('round_intro');
+    } else {
+      // No leadership questions or no leaders - just org questions
+      const rounds: EvaluationRound[] = [
+        { leaderName: null, roundType: 'org', completed: false },
+      ];
+      setEvaluationRounds(rounds);
+      setCurrentRoundIndex(0);
+      setStatus('round_intro');
     }
   };
 
   const confirmDeptLeaderSelection = () => {
     if (!selectedDeptLeader || !survey) return;
     const companyLeaders = survey.leaders.filter(l => l.type === 'company');
-    // Rounds: selected dept leader first, then all company leaders
+    // Rounds: org first, then dept leader, then company leaders
     const rounds: EvaluationRound[] = [
-      { leaderName: selectedDeptLeader, completed: false },
-      ...companyLeaders.map(l => ({ leaderName: l.name, completed: false })),
+      { leaderName: null, roundType: 'org', completed: false },
+      { leaderName: selectedDeptLeader, roundType: 'leadership', completed: false },
+      ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
     ];
     setEvaluationRounds(rounds);
     setCurrentRoundIndex(0);
@@ -223,7 +241,7 @@ export default function SurveyPage() {
     if (!survey || !respondent) return;
     setStatus('submitting');
 
-    const currentLeader = evaluationRounds.length > 0 ? evaluationRounds[currentRoundIndex]?.leaderName : null;
+    const currentLeader = currentRound?.leaderName || null;
 
     const responseRows = questions.map(q => {
       const ans = answers[q.id];
@@ -259,21 +277,14 @@ export default function SurveyPage() {
     if (error) { console.error('Submit error:', error); setStatus('ready'); return; }
 
     // Mark this round as completed
-    if (evaluationRounds.length > 0) {
-      const updatedRounds = [...evaluationRounds];
-      updatedRounds[currentRoundIndex] = { ...updatedRounds[currentRoundIndex], completed: true };
-      setEvaluationRounds(updatedRounds);
+    const updatedRounds = [...evaluationRounds];
+    updatedRounds[currentRoundIndex] = { ...updatedRounds[currentRoundIndex], completed: true };
+    setEvaluationRounds(updatedRounds);
 
-      const nextIncomplete = updatedRounds.findIndex((r, i) => i > currentRoundIndex && !r.completed);
-      if (nextIncomplete !== -1) {
-        setCurrentRoundIndex(nextIncomplete);
-        setStatus('round_done');
-      } else {
-        if (respondent.id) {
-          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
-        }
-        setStatus('done');
-      }
+    const nextIncomplete = updatedRounds.findIndex((r, i) => i > currentRoundIndex && !r.completed);
+    if (nextIncomplete !== -1) {
+      setCurrentRoundIndex(nextIncomplete);
+      setStatus('round_done');
     } else {
       if (respondent.id) {
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
@@ -284,17 +295,19 @@ export default function SurveyPage() {
 
   const answeredCount = questions.filter(q => answers[q.id] !== undefined).length;
   const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
-  const estimatedMinutes = Math.max(1, Math.ceil(questions.length * 0.4 * Math.max(1, evaluationRounds.length)));
+  const orgQCount = allQuestions.filter(q => q.section_type !== 'leadership').length;
+  const leaderQCount = allQuestions.filter(q => q.section_type === 'leadership').length;
+  const leaderRounds = evaluationRounds.filter(r => r.roundType === 'leadership').length;
+  const estimatedMinutes = Math.max(1, Math.ceil((orgQCount + leaderQCount * leaderRounds) * 0.4));
   const allAnswered = questions.every(q => {
     const ans = answers[q.id];
     if (ans === undefined) return false;
     if ((q.question_type === 'open_text' || q.question_type === 'text') && typeof ans === 'string' && ans.trim() === '') return false;
-    // Justification is mandatory when has_justification is true
     if (q.has_justification && (!justifications[q.id] || justifications[q.id].trim() === '')) return false;
     return true;
   });
   const currentQ = questions[currentIndex];
-  const currentLeaderName = evaluationRounds.length > 0 ? evaluationRounds[currentRoundIndex]?.leaderName : null;
+  const currentLeaderName = currentRound?.leaderName || null;
   const completedRounds = evaluationRounds.filter(r => r.completed).length;
   const totalRounds = evaluationRounds.length;
 
@@ -304,6 +317,11 @@ export default function SurveyPage() {
   const getScaleLabels = (q: Question): string[] => {
     if (q.scale_type && SCALE_LABELS[q.scale_type]) return SCALE_LABELS[q.scale_type];
     return survey?.scale_labels || [];
+  };
+
+  const getRoundLabel = (round: EvaluationRound, idx: number): string => {
+    if (round.roundType === 'org') return 'Perguntas sobre a organização';
+    return round.leaderName || `Avaliação ${idx + 1}`;
   };
 
   // --- SCREENS ---
@@ -339,7 +357,6 @@ export default function SurveyPage() {
     );
   }
 
-  // Company leaders don't evaluate anyone
   if (status === 'no_evaluation') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
@@ -357,7 +374,7 @@ export default function SurveyPage() {
     );
   }
 
-  // Department leader selection screen for collaborators
+  // Department leader selection screen
   if (status === 'select_dept_leader') {
     const deptLeaders = survey?.leaders.filter(l => l.type === 'department') || [];
     return (
@@ -392,7 +409,7 @@ export default function SurveyPage() {
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
               <h2 className="text-lg font-bold mb-2">Quem é seu líder de departamento?</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Selecione a liderança direta do seu departamento.{survey?.leaders.some(l => l.type === 'company') ? ' Você avaliará esta pessoa e também os líderes empresariais.' : ' Você avaliará esta pessoa.'}
+                Selecione a liderança direta do seu departamento.{survey?.leaders.some(l => l.type === 'company') ? ' Você responderá primeiro sobre a organização, depois avaliará esta pessoa e os líderes empresariais.' : ' Você avaliará esta pessoa.'}
               </p>
 
               <div className="space-y-2">
@@ -412,19 +429,19 @@ export default function SurveyPage() {
                       }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
                         {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
                       </span>
-                      <span className="font-medium" style={isSelected ? { color: primaryColor } : {}}>{leader.name}</span>
+                      <span className="font-medium">{leader.name}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="text-center">
+            <div className="flex justify-center">
               <Button
                 onClick={confirmDeptLeaderSelection}
                 disabled={!selectedDeptLeader}
-                style={{ backgroundColor: primaryColor }}
-                className="text-white px-8"
+                style={selectedDeptLeader ? { backgroundColor: primaryColor } : {}}
+                className={selectedDeptLeader ? 'text-white px-8' : 'px-8'}
                 size="lg"
               >
                 Continuar <ArrowRight className="ml-2 h-4 w-4" />
@@ -450,8 +467,8 @@ export default function SurveyPage() {
           <CheckCircle className="h-20 w-20 mx-auto mb-4" style={{ color: primaryColor }} />
           <h1 className="text-3xl font-bold mb-3">Obrigado!</h1>
           <p className="text-muted-foreground text-lg">
-            {totalRounds > 0
-              ? `Todas as ${totalRounds} avaliações foram registradas com sucesso.`
+            {totalRounds > 1
+              ? `Todas as ${totalRounds} etapas foram concluídas com sucesso.`
               : 'Sua resposta foi registrada com sucesso.'}
           </p>
           <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -466,6 +483,7 @@ export default function SurveyPage() {
 
   // Round intro screen
   if (status === 'round_intro') {
+    const isOrgRound = currentRound?.roundType === 'org';
     return (
       <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
         <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
@@ -475,7 +493,7 @@ export default function SurveyPage() {
           </div>
           {totalRounds > 1 && (
             <div className="text-sm text-muted-foreground">
-              Avaliação {currentRoundIndex + 1} de {totalRounds}
+              Etapa {currentRoundIndex + 1} de {totalRounds}
             </div>
           )}
         </header>
@@ -500,21 +518,37 @@ export default function SurveyPage() {
                 ) : null}
                 <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span>~{estimatedMinutes} min no total · {totalRounds} avaliação{totalRounds > 1 ? 'ões' : ''}</span>
+                  <span>~{estimatedMinutes} min no total · {totalRounds} etapa{totalRounds > 1 ? 's' : ''}</span>
                 </div>
               </div>
             )}
 
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
-              <p className="text-sm text-muted-foreground mb-2">
-                {completedRounds === 0 && currentRoundIndex === 0 ? 'Sua primeira avaliação será sobre:' : 'Próxima avaliação sobre:'}
-              </p>
-              <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
-                {evaluationRounds[currentRoundIndex]?.leaderName}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-2">
-                Responda todas as perguntas pensando nesta liderança.
-              </p>
+              {isOrgRound ? (
+                <>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {completedRounds === 0 ? 'Primeiro, responda sobre:' : 'Próxima etapa:'}
+                  </p>
+                  <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
+                    A Organização
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Responda as perguntas pensando na empresa/instituição como um todo.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {completedRounds === 0 ? 'Sua avaliação será sobre:' : 'Próxima avaliação sobre:'}
+                  </p>
+                  <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
+                    {currentRound?.leaderName}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Responda todas as perguntas pensando nesta liderança.
+                  </p>
+                </>
+              )}
             </div>
 
             {totalRounds > 1 && (
@@ -530,7 +564,7 @@ export default function SurveyPage() {
                         ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}80` }
                         : {}
                     }
-                    title={round.leaderName}
+                    title={getRoundLabel(round, i)}
                   />
                 ))}
               </div>
@@ -542,7 +576,7 @@ export default function SurveyPage() {
               className="text-white px-8"
               size="lg"
             >
-              {completedRounds === 0 && currentRoundIndex === 0 ? 'Iniciar Avaliação' : 'Continuar'}
+              {completedRounds === 0 && currentRoundIndex === 0 ? 'Iniciar' : 'Continuar'}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
 
@@ -560,8 +594,14 @@ export default function SurveyPage() {
 
   // Between-rounds screen
   if (status === 'round_done') {
-    const prevRoundIndex = evaluationRounds.findIndex((r, i) => i < currentRoundIndex && r.completed);
-    const lastCompletedName = evaluationRounds.filter(r => r.completed).pop()?.leaderName || '';
+    const lastCompletedName = (() => {
+      const last = evaluationRounds.filter(r => r.completed).pop();
+      if (!last) return '';
+      return last.roundType === 'org' ? 'Perguntas sobre a organização' : last.leaderName || '';
+    })();
+    const nextRound = evaluationRounds[currentRoundIndex];
+    const nextIsOrg = nextRound?.roundType === 'org';
+
     return (
       <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
         <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
@@ -574,9 +614,9 @@ export default function SurveyPage() {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-lg text-center animate-in fade-in duration-500">
             <CheckCircle className="h-16 w-16 mx-auto mb-4" style={{ color: primaryColor }} />
-            <h2 className="text-2xl font-bold mb-2">Avaliação concluída!</h2>
+            <h2 className="text-2xl font-bold mb-2">Etapa concluída!</h2>
             <p className="text-muted-foreground mb-6">
-              Você concluiu a avaliação de <strong>{lastCompletedName}</strong>.
+              Você concluiu: <strong>{lastCompletedName}</strong>.
             </p>
 
             <div className="flex justify-center gap-2 mb-6">
@@ -591,20 +631,25 @@ export default function SurveyPage() {
                       ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}40` }
                       : {}
                   }
-                  title={round.leaderName}
+                  title={getRoundLabel(round, i)}
                 />
               ))}
             </div>
 
             <p className="text-sm text-muted-foreground mb-6">
-              {completedRounds} de {totalRounds} avaliações concluídas. Falta{totalRounds - completedRounds > 1 ? 'm' : ''} {totalRounds - completedRounds}.
+              {completedRounds} de {totalRounds} etapas concluídas. Falta{totalRounds - completedRounds > 1 ? 'm' : ''} {totalRounds - completedRounds}.
             </p>
 
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
-              <p className="text-sm text-muted-foreground mb-2">Próxima avaliação sobre:</p>
+              <p className="text-sm text-muted-foreground mb-2">Próxima etapa:</p>
               <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
-                {evaluationRounds[currentRoundIndex]?.leaderName}
+                {nextIsOrg ? 'A Organização' : nextRound?.leaderName}
               </h2>
+              {!nextIsOrg && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Responda pensando nesta liderança.
+                </p>
+              )}
             </div>
 
             <Button
@@ -624,20 +669,23 @@ export default function SurveyPage() {
   // Main survey screen
   return (
     <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-      {/* Header */}
       <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
           <span className="font-semibold text-sm">{branding?.name}</span>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          {currentLeaderName && (
+          {currentRound?.roundType === 'org' ? (
+            <span className="font-medium px-2 py-1 rounded-lg text-xs" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
+              Sobre a organização
+            </span>
+          ) : currentLeaderName ? (
             <span className="font-medium px-2 py-1 rounded-lg text-xs" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
               Avaliando: {currentLeaderName}
             </span>
-          )}
+          ) : null}
           {totalRounds > 1 && (
-            <span className="text-xs">{currentRoundIndex + 1}/{totalRounds}</span>
+            <span className="text-xs">Etapa {currentRoundIndex + 1}/{totalRounds}</span>
           )}
         </div>
       </header>
@@ -808,8 +856,8 @@ export default function SurveyPage() {
               className="text-white"
             >
               {status === 'submitting' ? 'Enviando...' : (
-                evaluationRounds.length > 0 && currentRoundIndex < totalRounds - 1
-                  ? 'Finalizar e Próxima Avaliação'
+                currentRoundIndex < totalRounds - 1
+                  ? 'Finalizar e Próxima Etapa'
                   : 'Enviar Respostas'
               )}
             </Button>
