@@ -55,7 +55,7 @@ export default function Respondents() {
       email: String(row['Email'] || row['email'] || '').trim() || null,
       department: String(row['Departamento'] || row['department'] || '').trim() || null,
       company_leadership: String(row['Liderança Empresarial'] || row['company_leadership'] || '').trim() || null,
-      department_leadership: String(row['Liderança Departamento'] || row['department_leadership'] || '').trim() || null,
+      department_leadership: String(row['Liderança Área'] || row['Liderança Departamento'] || row['department_leadership'] || '').trim() || null,
       token: generateToken(),
     }));
 
@@ -91,7 +91,7 @@ export default function Respondents() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([['Nome', 'Email', 'Departamento', 'Liderança Empresarial', 'Liderança Departamento'], ['João Silva', 'joao@empresa.com', 'TI', 'Carlos Souza', 'Ana Lima']]);
+    const ws = XLSX.utils.aoa_to_sheet([['Nome', 'Email', 'Departamento', 'Liderança Empresarial', 'Liderança Área'], ['João Silva', 'joao@empresa.com', 'TI', 'Carlos Souza', 'Ana Lima']]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores');
     XLSX.writeFile(wb, 'modelo_colaboradores.xlsx');
@@ -124,7 +124,7 @@ export default function Respondents() {
             <Input placeholder="Email" value={manualForm.email} onChange={e => setManualForm(f => ({ ...f, email: e.target.value }))} />
             <Input placeholder="Departamento" value={manualForm.department} onChange={e => setManualForm(f => ({ ...f, department: e.target.value }))} />
             <Input placeholder="Lid. Empresarial" value={manualForm.company_leadership} onChange={e => setManualForm(f => ({ ...f, company_leadership: e.target.value }))} />
-            <Input placeholder="Lid. Departamento" value={manualForm.department_leadership} onChange={e => setManualForm(f => ({ ...f, department_leadership: e.target.value }))} />
+            <Input placeholder="Lid. Área" value={manualForm.department_leadership} onChange={e => setManualForm(f => ({ ...f, department_leadership: e.target.value }))} />
             <Button onClick={addManual}><Plus className="mr-2 h-4 w-4" />Adicionar</Button>
           </div>
         </CardContent>
