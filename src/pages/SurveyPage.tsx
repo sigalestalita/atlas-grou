@@ -181,7 +181,14 @@ export default function SurveyPage() {
     // Collaborator
     setRespondentRole('collaborator');
     if (deptLeaders.length > 0 && hasLeadershipQuestions) {
-      setStatus('select_dept_leader');
+      // Start with org round; dept leader selection will appear after org round completes
+      setPendingDeptLeaderSelection(true);
+      const rounds: EvaluationRound[] = [
+        { leaderName: null, roundType: 'org', completed: false },
+      ];
+      setEvaluationRounds(rounds);
+      setCurrentRoundIndex(0);
+      setStatus('round_intro');
     } else if (hasLeadershipQuestions && companyLeaders.length > 0) {
       // No dept leaders, org + company leaders
       const rounds: EvaluationRound[] = [
