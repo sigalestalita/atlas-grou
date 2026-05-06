@@ -831,7 +831,7 @@ export default function SurveyPage() {
                 <Textarea
                   value={justifications[currentQ.id] || ''}
                   onChange={e => setJustifications(j => ({ ...j, [currentQ.id]: e.target.value }))}
-                  placeholder="Justifique sua resposta... (obrigatório)"
+                  placeholder=""
                   className="min-h-[80px] text-sm"
                 />
                 {justifications[currentQ.id] !== undefined && justifications[currentQ.id].trim() === '' && (
