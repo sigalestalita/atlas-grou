@@ -44,6 +44,7 @@ interface EvaluationRound {
 
 type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'round_done' | 'done' | 'no_evaluation';
 
+
 const SCALE_LABELS: Record<string, string[]> = {
   avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
   satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
@@ -71,6 +72,7 @@ export default function SurveyPage() {
   // Department leader selection
   const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
   const [respondentRole, setRespondentRole] = useState<'collaborator' | 'department_leader' | 'company_leader'>('collaborator');
+  const [pendingDeptLeaderSelection, setPendingDeptLeaderSelection] = useState(false);
 
   // Current round's questions
   const currentRound = evaluationRounds[currentRoundIndex];
@@ -179,7 +181,14 @@ export default function SurveyPage() {
     // Collaborator
     setRespondentRole('collaborator');
     if (deptLeaders.length > 0 && hasLeadershipQuestions) {
-      setStatus('select_dept_leader');
+      // Start with org round; dept leader selection will appear after org round completes
+      setPendingDeptLeaderSelection(true);
+      const rounds: EvaluationRound[] = [
+        { leaderName: null, roundType: 'org', completed: false },
+      ];
+      setEvaluationRounds(rounds);
+      setCurrentRoundIndex(0);
+      setStatus('round_intro');
     } else if (hasLeadershipQuestions && companyLeaders.length > 0) {
       // No dept leaders, org + company leaders
       const rounds: EvaluationRound[] = [
@@ -202,15 +211,17 @@ export default function SurveyPage() {
 
   const confirmDeptLeaderSelection = () => {
     if (!selectedDeptLeader || !survey) return;
+    setPendingDeptLeaderSelection(false);
     const companyLeaders = survey.leaders.filter(l => l.type === 'company');
-    // Rounds: org first, then dept leader, then company leaders
-    const rounds: EvaluationRound[] = [
-      { leaderName: null, roundType: 'org', completed: false },
+    // Leadership rounds: dept leader first, then company leaders
+    const leadershipRounds: EvaluationRound[] = [
       { leaderName: selectedDeptLeader, roundType: 'leadership', completed: false },
       ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
     ];
-    setEvaluationRounds(rounds);
-    setCurrentRoundIndex(0);
+    // Append to existing rounds (org already completed)
+    const updatedRounds = [...evaluationRounds, ...leadershipRounds];
+    setEvaluationRounds(updatedRounds);
+    setCurrentRoundIndex(evaluationRounds.length); // first leadership round
     setStatus('round_intro');
   };
 
@@ -285,6 +296,9 @@ export default function SurveyPage() {
     if (nextIncomplete !== -1) {
       setCurrentRoundIndex(nextIncomplete);
       setStatus('round_done');
+    } else if (pendingDeptLeaderSelection && !selectedDeptLeader) {
+      // Org round done, now ask for dept leader selection before leadership rounds
+      setStatus('select_dept_leader');
     } else {
       if (respondent.id) {
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
