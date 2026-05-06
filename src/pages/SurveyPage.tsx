@@ -294,6 +294,9 @@ export default function SurveyPage() {
     if (nextIncomplete !== -1) {
       setCurrentRoundIndex(nextIncomplete);
       setStatus('round_done');
+    } else if (pendingDeptLeaderSelection && !selectedDeptLeader) {
+      // Org round done, now ask for dept leader selection before leadership rounds
+      setStatus('select_dept_leader');
     } else {
       if (respondent.id) {
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
