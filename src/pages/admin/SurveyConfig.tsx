@@ -93,7 +93,7 @@ export default function SurveyConfig() {
     // Copy sections and questions
     const { data: tmplSections } = await supabase.from('survey_sections').select('*').eq('survey_id', templateId).order('sort_order');
     for (const sec of tmplSections || []) {
-      const { data: newSec } = await supabase.from('survey_sections').insert({ survey_id: newSurvey.id, title: sec.title, sort_order: sec.sort_order }).select().single();
+      const { data: newSec } = await supabase.from('survey_sections').insert({ survey_id: newSurvey.id, title: sec.title, sort_order: sec.sort_order, section_type: (sec as any).section_type || 'organization' } as any).select().single();
       if (!newSec) continue;
       const { data: tmplQs } = await supabase.from('survey_questions').select('*').eq('section_id', sec.id).order('sort_order');
       for (const q of tmplQs || []) {
@@ -203,9 +203,31 @@ export default function SurveyConfig() {
               {sections.map(sec => (
                 <AccordionItem key={sec.id} value={sec.id} className="border rounded-lg px-4">
                   <AccordionTrigger className="text-sm font-medium">
-                    <div className="flex justify-between w-full mr-2"><span>{sec.title}</span><span className="text-xs text-muted-foreground">{sec.questions?.length || 0} perguntas</span></div>
+                    <div className="flex justify-between w-full mr-2">
+                      <span>{sec.title}</span>
+                      <div className="flex items-center gap-2">
+                        {sec.section_type === 'leadership' && (
+                          <Badge variant="outline" className="text-xs">Liderança</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">{sec.questions?.length || 0} perguntas</span>
+                      </div>
+                    </div>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3 pb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Switch
+                        checked={sec.section_type === 'leadership'}
+                        onCheckedChange={async (checked) => {
+                          const newType = checked ? 'leadership' : 'organization';
+                          await supabase.from('survey_sections').update({ section_type: newType } as any).eq('id', sec.id);
+                          loadSections();
+                          toast({ title: checked ? 'Seção marcada como liderança' : 'Seção marcada como organizacional' });
+                        }}
+                      />
+                      <label className="text-xs text-muted-foreground">
+                        Seção de liderança (repetida por líder avaliado)
+                      </label>
+                    </div>
                     {sec.questions?.map((q: any, i: number) => (
                       <div key={q.id} className="flex items-center gap-2 text-sm">
                         <span className="text-muted-foreground w-6">{i + 1}.</span>
