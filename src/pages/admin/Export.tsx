@@ -82,7 +82,7 @@ export default function ExportPage() {
                 <SelectContent>
                   <SelectItem value="department">Departamento</SelectItem>
                   <SelectItem value="company_leadership">Liderança Empresarial</SelectItem>
-                  <SelectItem value="department_leadership">Liderança de Departamento</SelectItem>
+                  <SelectItem value="department_leadership">Liderança de Área</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -253,7 +253,7 @@ export default function SurveyConfig() {
               <Users className="h-5 w-5" />
               Lideranças
             </CardTitle>
-            <p className="text-sm text-muted-foreground">Configure as lideranças (empresarial ou de departamento) que o respondente poderá selecionar.</p>
+            <p className="text-sm text-muted-foreground">Configure as lideranças (empresarial ou de área) que o respondente poderá selecionar.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Company leaders */}
@@ -279,7 +279,7 @@ export default function SurveyConfig() {
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <UserCheck className="h-4 w-4 text-orange-500" />
-                  <span className="text-sm font-medium">Liderança de Departamento</span>
+                  <span className="text-sm font-medium">Liderança de Área</span>
                 </div>
                 {leaders.map((leader, i) => leader.type === 'department' && (
                   <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg mb-1">
@@ -299,7 +299,7 @@ export default function SurveyConfig() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="company">Empresarial</SelectItem>
-                  <SelectItem value="department">Departamento</SelectItem>
+                  <SelectItem value="department">Área</SelectItem>
                 </SelectContent>
               </Select>
               <Input
