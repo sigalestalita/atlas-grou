@@ -321,6 +321,11 @@ export default function SurveyPage() {
     return true;
   });
   const currentQ = questions[currentIndex];
+  const currentQuestionBlocksAdvance = !!currentQ?.has_justification && (
+    answers[currentQ.id] === undefined ||
+    !justifications[currentQ.id] ||
+    justifications[currentQ.id].trim() === ''
+  );
   const currentLeaderName = currentRound?.leaderName || null;
   const completedRounds = evaluationRounds.filter(r => r.completed).length;
   const totalRounds = evaluationRounds.length;
@@ -879,7 +884,7 @@ export default function SurveyPage() {
             <Button
               variant="ghost"
               onClick={() => setCurrentIndex(i => Math.min(questions.length - 1, i + 1))}
-              disabled={currentIndex === questions.length - 1}
+              disabled={currentIndex === questions.length - 1 || currentQuestionBlocksAdvance}
             >
               Próxima<ArrowRight className="ml-2 h-4 w-4" />
             </Button>
