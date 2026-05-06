@@ -1,0 +1,1 @@
+UPDATE survey_questions SET justification_prompt = 'Justifique' WHERE id IN ('672d883b-c4c6-4fba-939b-1f249510c2e6', '0cd06692-989c-414a-8b89-53a16ca29d1f');
