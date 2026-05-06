@@ -72,6 +72,7 @@ export default function SurveyPage() {
   // Department leader selection
   const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
   const [respondentRole, setRespondentRole] = useState<'collaborator' | 'department_leader' | 'company_leader'>('collaborator');
+  const [pendingDeptLeaderSelection, setPendingDeptLeaderSelection] = useState(false);
 
   // Current round's questions
   const currentRound = evaluationRounds[currentRoundIndex];
