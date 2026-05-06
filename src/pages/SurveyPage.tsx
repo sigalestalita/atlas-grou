@@ -44,6 +44,7 @@ interface EvaluationRound {
 
 type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'round_done' | 'done' | 'no_evaluation';
 
+
 const SCALE_LABELS: Record<string, string[]> = {
   avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
   satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
