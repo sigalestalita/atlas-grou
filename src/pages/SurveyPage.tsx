@@ -211,15 +211,17 @@ export default function SurveyPage() {
 
   const confirmDeptLeaderSelection = () => {
     if (!selectedDeptLeader || !survey) return;
+    setPendingDeptLeaderSelection(false);
     const companyLeaders = survey.leaders.filter(l => l.type === 'company');
-    // Rounds: org first, then dept leader, then company leaders
-    const rounds: EvaluationRound[] = [
-      { leaderName: null, roundType: 'org', completed: false },
+    // Leadership rounds: dept leader first, then company leaders
+    const leadershipRounds: EvaluationRound[] = [
       { leaderName: selectedDeptLeader, roundType: 'leadership', completed: false },
       ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
     ];
-    setEvaluationRounds(rounds);
-    setCurrentRoundIndex(0);
+    // Append to existing rounds (org already completed)
+    const updatedRounds = [...evaluationRounds, ...leadershipRounds];
+    setEvaluationRounds(updatedRounds);
+    setCurrentRoundIndex(evaluationRounds.length); // first leadership round
     setStatus('round_intro');
   };
 
