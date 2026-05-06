@@ -321,11 +321,19 @@ export default function SurveyPage() {
     return true;
   });
   const currentQ = questions[currentIndex];
-  const currentQuestionBlocksAdvance = !!currentQ?.has_justification && (
-    answers[currentQ.id] === undefined ||
-    !justifications[currentQ.id] ||
-    justifications[currentQ.id].trim() === ''
-  );
+  const currentQuestionBlocksAdvance = (() => {
+    if (!currentQ) return false;
+    // Block if open text question has no answer
+    if ((currentQ.question_type === 'open_text' || currentQ.question_type === 'text') &&
+      (!answers[currentQ.id] || (typeof answers[currentQ.id] === 'string' && (answers[currentQ.id] as string).trim() === ''))) return true;
+    // Block if justification is required but missing
+    if (currentQ.has_justification && (
+      answers[currentQ.id] === undefined ||
+      !justifications[currentQ.id] ||
+      justifications[currentQ.id].trim() === ''
+    )) return true;
+    return false;
+  })();
   const currentLeaderName = currentRound?.leaderName || null;
   const completedRounds = evaluationRounds.filter(r => r.completed).length;
   const totalRounds = evaluationRounds.length;
