@@ -1,0 +1,1 @@
+UPDATE public.survey_questions SET text = 'A liderança demonstra interesse genuíno pelas pessoas' WHERE id = '25aaabf9-9997-4fde-a3f2-108b8b867234';
