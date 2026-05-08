@@ -323,12 +323,14 @@ export default function SurveyPage() {
   const currentQ = questions[currentIndex];
   const currentQuestionBlocksAdvance = (() => {
     if (!currentQ) return false;
+    const ans = answers[currentQ.id];
     // Block if open text question has no answer
     if ((currentQ.question_type === 'open_text' || currentQ.question_type === 'text') &&
-      (!answers[currentQ.id] || (typeof answers[currentQ.id] === 'string' && (answers[currentQ.id] as string).trim() === ''))) return true;
+      (ans === undefined || (typeof ans === 'string' && ans.trim() === ''))) return true;
+    // Block if any other question type has no answer selected
+    if (ans === undefined || (typeof ans === 'string' && ans.trim() === '')) return true;
     // Block if justification is required but missing
     if (currentQ.has_justification && (
-      answers[currentQ.id] === undefined ||
       !justifications[currentQ.id] ||
       justifications[currentQ.id].trim() === ''
     )) return true;
