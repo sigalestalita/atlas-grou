@@ -1,0 +1,2 @@
+DELETE FROM public.survey_responses WHERE survey_id = '1aef6816-fa1b-49bf-b974-fc996e9eff63';
+UPDATE public.respondents SET status = 'pending', responded_at = NULL WHERE survey_id = '1aef6816-fa1b-49bf-b974-fc996e9eff63';
