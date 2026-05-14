@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield, Users, UserX } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Question {
   id: string;
@@ -65,6 +69,7 @@ export default function SurveyPage() {
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Multi-round evaluation state
   const [evaluationRounds, setEvaluationRounds] = useState<EvaluationRound[]>([]);
@@ -388,6 +393,22 @@ export default function SurveyPage() {
   const leaderQCount = allQuestions.filter(q => q.section_type === 'leadership').length;
   const leaderRounds = evaluationRounds.filter(r => r.roundType === 'leadership').length;
   const estimatedMinutes = Math.max(1, Math.ceil((orgQCount + leaderQCount * leaderRounds) * 0.4));
+
+  // Global progress across all rounds
+  const questionsPerRound = (round: EvaluationRound) =>
+    round.roundType === 'leadership' ? leaderQCount : orgQCount;
+  const totalQuestionsAllRounds = evaluationRounds.reduce((acc, r) => acc + questionsPerRound(r), 0);
+  const completedQuestionsAllRounds = evaluationRounds.reduce((acc, r, i) => {
+    if (r.completed) return acc + questionsPerRound(r);
+    if (i === currentRoundIndex) return acc + answeredCount;
+    return acc;
+  }, 0);
+  const overallProgress = totalQuestionsAllRounds > 0
+    ? Math.round((completedQuestionsAllRounds / totalQuestionsAllRounds) * 100)
+    : 0;
+  const remainingQuestions = Math.max(0, totalQuestionsAllRounds - completedQuestionsAllRounds);
+  const minutesRemaining = Math.max(1, Math.ceil(remainingQuestions * 0.4));
+  const isLastRound = currentRoundIndex >= evaluationRounds.length - 1 && !pendingDeptLeaderSelection;
   const allAnswered = questions.every(q => {
     const ans = answers[q.id];
     if (ans === undefined) return false;
@@ -796,11 +817,26 @@ export default function SurveyPage() {
 
       {/* Progress */}
       <div className="px-4 py-2 bg-white/50">
-        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-          <span>{answeredCount} de {questions.length} perguntas</span>
-          <span>{progress}%</span>
+        <div className="flex justify-between text-xs text-muted-foreground mb-1 gap-2 flex-wrap">
+          <span>
+            {totalRounds > 1 ? (
+              <>Progresso geral: {completedQuestionsAllRounds} de {totalQuestionsAllRounds} perguntas</>
+            ) : (
+              <>{answeredCount} de {questions.length} perguntas</>
+            )}
+          </span>
+          <span className="flex items-center gap-3">
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />~{minutesRemaining} min restantes</span>
+            <span className="font-medium">{totalRounds > 1 ? overallProgress : progress}%</span>
+          </span>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Progress value={totalRounds > 1 ? overallProgress : progress} className="h-2" />
+        {totalRounds > 1 && (
+          <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+            <span>Etapa atual: {answeredCount}/{questions.length}</span>
+            <span>{progress}% desta etapa</span>
+          </div>
+        )}
       </div>
 
       {submitError && (
@@ -964,16 +1000,17 @@ export default function SurveyPage() {
 
           {currentIndex === questions.length - 1 && allAnswered ? (
             <Button
-              onClick={submitRound}
+              onClick={() => isLastRound ? setConfirmOpen(true) : submitRound()}
               disabled={status === 'submitting'}
               style={{ backgroundColor: primaryColor }}
               className="text-white"
             >
               {status === 'submitting' ? 'Enviando...' : (
-                currentRoundIndex < totalRounds - 1
+                !isLastRound
                   ? 'Finalizar e Próxima Etapa'
-                  : 'Enviar Respostas'
+                  : 'Revisar e Enviar'
               )}
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
             <Button
@@ -986,6 +1023,38 @@ export default function SurveyPage() {
           )}
         </div>
       </footer>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enviar suas respostas?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Você está prestes a finalizar a pesquisa. Após o envio, <strong>não será possível alterar</strong> suas respostas.
+                </p>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Etapas concluídas:</span><strong>{completedRounds + 1} de {totalRounds}</strong></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Perguntas respondidas:</span><strong>{completedQuestionsAllRounds + (allAnswered ? 0 : 0)}/{totalQuestionsAllRounds}</strong></div>
+                </div>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Shield className="h-3 w-3" /> Suas respostas são 100% anônimas.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmOpen(false); submitRound(); }}
+              style={{ backgroundColor: primaryColor }}
+              className="text-white"
+            >
+              Confirmar envio
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
