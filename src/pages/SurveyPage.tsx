@@ -817,11 +817,26 @@ export default function SurveyPage() {
 
       {/* Progress */}
       <div className="px-4 py-2 bg-white/50">
-        <div className="flex justify-between text-xs text-muted-foreground mb-1">
-          <span>{answeredCount} de {questions.length} perguntas</span>
-          <span>{progress}%</span>
+        <div className="flex justify-between text-xs text-muted-foreground mb-1 gap-2 flex-wrap">
+          <span>
+            {totalRounds > 1 ? (
+              <>Progresso geral: {completedQuestionsAllRounds} de {totalQuestionsAllRounds} perguntas</>
+            ) : (
+              <>{answeredCount} de {questions.length} perguntas</>
+            )}
+          </span>
+          <span className="flex items-center gap-3">
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />~{minutesRemaining} min restantes</span>
+            <span className="font-medium">{totalRounds > 1 ? overallProgress : progress}%</span>
+          </span>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Progress value={totalRounds > 1 ? overallProgress : progress} className="h-2" />
+        {totalRounds > 1 && (
+          <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+            <span>Etapa atual: {answeredCount}/{questions.length}</span>
+            <span>{progress}% desta etapa</span>
+          </div>
+        )}
       </div>
 
       {submitError && (
