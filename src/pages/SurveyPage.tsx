@@ -335,6 +335,7 @@ export default function SurveyPage() {
       if (respondent.id) {
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
       }
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       setStatus('done');
     }
   };
