@@ -42,8 +42,8 @@ const App = () => (
             <Route path="/setup" element={<Setup />} />
 
             {/* Anonymous survey routes (no auth needed) */}
-            <Route path="/survey/:slug/:token" element={<SurveyPage />} />
-            <Route path="/survey/:slug" element={<SurveyPage />} />
+            <Route path="/survey/:slug/:token" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
+            <Route path="/survey/:slug" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
