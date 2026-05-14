@@ -20,6 +20,7 @@ import SurveyConfig from "@/pages/admin/SurveyConfig";
 import Respondents from "@/pages/admin/Respondents";
 import Links from "@/pages/admin/Links";
 import ProgressPage from "@/pages/admin/Progress";
+import Responses from "@/pages/admin/Responses";
 import ExportPage from "@/pages/admin/Export";
 import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="evaluations" element={<EvaluationMatrix />} />
                 <Route path="links" element={<Links />} />
                 <Route path="progress" element={<ProgressPage />} />
+                <Route path="responses" element={<Responses />} />
                 <Route path="export" element={<ExportPage />} />
               </Route>
 
@@ -72,6 +74,7 @@ const App = () => (
               <Route path="respondents" element={<Respondents />} />
               <Route path="links" element={<Links />} />
               <Route path="progress" element={<ProgressPage />} />
+              <Route path="responses" element={<Responses />} />
               <Route path="export" element={<ExportPage />} />
             </Route>
 
