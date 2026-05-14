@@ -80,6 +80,21 @@ export default function SurveyPage() {
     ? allQuestions.filter(q => q.section_type === 'leadership')
     : allQuestions.filter(q => q.section_type !== 'leadership');
 
+  // localStorage key for draft persistence (per token)
+  const draftKey = token ? `survey_draft_${token}` : null;
+
+  // Persist draft to localStorage whenever answers/justifications change
+  useEffect(() => {
+    if (!draftKey) return;
+    if (status === 'loading' || status === 'invalid' || status === 'already_responded' || status === 'done' || status === 'no_evaluation') return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers, justifications, currentIndex, currentRoundIndex,
+        selectedDeptLeader, savedAt: Date.now(),
+      }));
+    } catch {}
+  }, [answers, justifications, currentIndex, currentRoundIndex, selectedDeptLeader, status, draftKey]);
+
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
   const loadSurvey = async () => {
