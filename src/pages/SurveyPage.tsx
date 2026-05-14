@@ -222,6 +222,23 @@ export default function SurveyPage() {
       setCurrentRoundIndex(0);
       setStatus('round_intro');
     }
+
+    // Restore draft from localStorage if present
+    if (draftKey) {
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.answers) setAnswers(draft.answers);
+          if (draft?.justifications) setJustifications(draft.justifications);
+          if (typeof draft?.currentIndex === 'number') setCurrentIndex(draft.currentIndex);
+          if (typeof draft?.currentRoundIndex === 'number') setCurrentRoundIndex(draft.currentRoundIndex);
+          if (draft?.selectedDeptLeader) setSelectedDeptLeader(draft.selectedDeptLeader);
+          // If user had progressed past intro, jump straight back into the questions
+          if (draft?.answers && Object.keys(draft.answers).length > 0) setStatus('ready');
+        }
+      } catch {}
+    }
   };
 
   const confirmDeptLeaderSelection = () => {
