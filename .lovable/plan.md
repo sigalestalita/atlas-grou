@@ -1,54 +1,61 @@
-## Problema
+## Novo dashboard: Acompanhamento em tempo real
 
-Usuários relatam **telas brancas** durante a pesquisa que resultam em dados perdidos. Investigando `src/pages/SurveyPage.tsx` identifiquei três causas:
+Criar uma nova aba **"Acompanhamento"** (`/admin/tracking`) no painel da empresa, focada em métricas agregadas e atualizadas ao vivo. Diferente de `/admin/responses` (envios individuais) e `/admin/progress` (taxa por depto), esta tela é o **painel de controle** do RH durante a coleta — visão por **colaborador** e por **líder**.
 
-1. **Sem ErrorBoundary** — qualquer erro de renderização deixa a tela 100% branca, sem feedback nem recuperação.
-2. **`submitRound` frágil** — não tem try/catch real, sem retry, sem mensagem de erro visível. Se a rede falhar ou a chamada travar, o botão fica em "Enviando…" e o usuário acha que sumiu tudo.
-3. **Sem aviso ao sair** — fechar/recarregar a aba durante o preenchimento descarta o que está em memória (o draft em localStorage ajuda, mas o usuário não sabe).
+### Cards no topo (KPIs em tempo real)
 
-## Solução
+- **Envios completos** — total de submissões anônimas
+- **Colaboradores que responderam** — X de Y (Y = total de respondentes cadastrados)
+- **Lideranças avaliadas** — quantas distintas já receberam ≥1 avaliação, vs total cadastrado em `surveys.leaders`
+- **Última resposta** — timestamp + badge "AO VIVO" pulsando ao receber nova resposta
 
-### 1. ErrorBoundary global na página da pesquisa
-Novo arquivo `src/components/SurveyErrorBoundary.tsx`. Envolver `<SurveyPage>` em `src/App.tsx` (ou dentro do próprio componente). Em caso de crash mostra:
-- Mensagem amigável ("Algo deu errado, mas suas respostas estão salvas")
-- Botão "Tentar novamente" (recarrega mantendo o token na URL → o draft do localStorage restaura tudo)
-- Botão "Copiar detalhes do erro" para suporte
+### Seção 1 — Progresso geral
 
-### 2. Submissão robusta com retry e feedback
-Refatorar `submitRound`:
-- `try/catch` cobrindo a chamada Supabase + a marcação do respondente
-- **Retry automático** com backoff (3 tentativas: 0s, 2s, 5s) para erros de rede
-- Toast de erro visível ("Não foi possível enviar agora — tentando novamente…") e estado de erro persistente que mostra um banner com botão "Tentar enviar de novo" caso falhe definitivamente
-- Manter o draft no localStorage até confirmação de sucesso (já está OK, mas garantir que NÃO seja apagado em caso de erro)
-- Timeout explícito de 30s na chamada (`AbortController`) para não ficar pendurado
+Barra grande com % e contagem (envios recebidos / colaboradores cadastrados).
 
-### 3. Aviso `beforeunload`
-Quando houver respostas não enviadas (`Object.keys(answers).length > 0` e status não-final), adicionar listener `beforeunload` que dispara o prompt nativo do browser ("Você tem alterações não salvas, sair mesmo assim?").
+### Seção 2 — Avaliados (lideranças, individual)
 
-### 4. Proteção extra de renderização
-- Trocar acessos como `currentRound?.leaderName` para garantir fallbacks consistentes
-- Validar que `currentIndex` e `currentRoundIndex` restaurados do draft estão dentro dos limites antes de aplicar
+Tabela de **cada liderança cadastrada** no `surveys.leaders` (exceto `hidden:true`):
 
-## Arquivos afetados
+| Líder | Tipo (empresarial / departamento) | Avaliações recebidas | Barra |
 
-- **novo**: `src/components/SurveyErrorBoundary.tsx`
-- **editado**: `src/pages/SurveyPage.tsx` — refatorar `submitRound`, adicionar `useEffect` de `beforeunload`, validar índices restaurados, envolver render em `<SurveyErrorBoundary>`
+Inclui lideranças com 0 avaliações para o RH ver quem ainda falta. Ordenada por nº de avaliações desc.
 
-## Detalhes técnicos
+### Seção 3 — Avaliadores (colaboradores, individual)
 
-```text
-submitRound flow:
-  setStatus('submitting')
-  for attempt in 1..3:
-    try (com AbortController, timeout 30s):
-      insert survey_responses
-      if respondent.id: update respondents
-      remove draft, setStatus('done'/'round_done')
-      return
-    catch:
-      if attempt < 3: aguarda backoff e tenta de novo
-      else: setStatus('ready'); setSubmitError(msg)
-  banner persistente com botão "Reenviar"
-```
+Tabela de **cada colaborador** da lista `respondents` do survey ativo:
 
-Sem mudanças de schema, sem novos endpoints, sem mudar regras de anonimato.
+| Nome | Email | Departamento | Líder do depto | Status | Respondido em |
+
+- **Status** calculado em tempo real: "Respondido" se `respondents.status='responded'` OU se existe `survey_responses` com a mesma combinação de `department + department_leadership` no mesmo timestamp. (Como a flag `responded` está pouco confiável — só 1 de 24 marcados na Tectaris — mostrar ambos os sinais e priorizar o realtime.)
+- Busca por nome/email
+- Filtro: todos / respondidos / pendentes
+
+⚠️ **Anonimato preservado**: o cruzamento exibido é apenas "colaborador X aparenta ter respondido" baseado em metadata de grupo (depto + liderança), nunca vinculando a uma resposta específica. As respostas individuais continuam acessíveis só em `/admin/responses` sem identificação.
+
+### Seção 4 — Linha do tempo (lateral)
+
+Feed das últimas 15 submissões: hora + liderança avaliada + departamento. Atualiza por push.
+
+### Realtime
+
+Subscription única em `survey_responses` (INSERT) + `respondents` (UPDATE). A cada evento:
+- Recalcula KPIs
+- Atualiza linha do colaborador correspondente
+- Adiciona ao feed
+- Pulsa badge
+
+### Detalhes técnicos
+
+- **Novo arquivo**: `src/pages/admin/Tracking.tsx`
+- **Rota** em `src/App.tsx`: `/admin/tracking` dentro de `AdminLayout`
+- **Nav item** em `src/components/AdminLayout.tsx`: "Acompanhamento" com ícone `Activity` antes de "Respostas"
+- Reutiliza `Card`, `Progress`, `Badge`, `Table`, `Input`, `Tabs` do design system
+- Agregações client-side via `useMemo`
+- Realtime já habilitado nas tabelas envolvidas
+
+### O que NÃO muda
+
+- `/admin/responses` continua (linha-a-linha das respostas anônimas)
+- `/admin/progress` continua
+- Schema do banco intocado
