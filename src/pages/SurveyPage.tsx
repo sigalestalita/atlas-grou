@@ -294,7 +294,7 @@ export default function SurveyPage() {
     }
   };
 
-  const submitRound = async (isRetry = false) => {
+  const submitRound = async () => {
     if (!survey || !respondent) return;
     setSubmitError(null);
     setStatus('submitting');
