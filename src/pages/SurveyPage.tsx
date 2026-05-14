@@ -64,6 +64,7 @@ export default function SurveyPage() {
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Multi-round evaluation state
   const [evaluationRounds, setEvaluationRounds] = useState<EvaluationRound[]>([]);
