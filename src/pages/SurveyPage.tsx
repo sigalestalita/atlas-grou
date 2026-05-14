@@ -80,6 +80,21 @@ export default function SurveyPage() {
     ? allQuestions.filter(q => q.section_type === 'leadership')
     : allQuestions.filter(q => q.section_type !== 'leadership');
 
+  // localStorage key for draft persistence (per token)
+  const draftKey = token ? `survey_draft_${token}` : null;
+
+  // Persist draft to localStorage whenever answers/justifications change
+  useEffect(() => {
+    if (!draftKey) return;
+    if (status === 'loading' || status === 'invalid' || status === 'already_responded' || status === 'done' || status === 'no_evaluation') return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        answers, justifications, currentIndex, currentRoundIndex,
+        selectedDeptLeader, savedAt: Date.now(),
+      }));
+    } catch {}
+  }, [answers, justifications, currentIndex, currentRoundIndex, selectedDeptLeader, status, draftKey]);
+
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
   const loadSurvey = async () => {
@@ -207,6 +222,23 @@ export default function SurveyPage() {
       setCurrentRoundIndex(0);
       setStatus('round_intro');
     }
+
+    // Restore draft from localStorage if present
+    if (draftKey) {
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.answers) setAnswers(draft.answers);
+          if (draft?.justifications) setJustifications(draft.justifications);
+          if (typeof draft?.currentIndex === 'number') setCurrentIndex(draft.currentIndex);
+          if (typeof draft?.currentRoundIndex === 'number') setCurrentRoundIndex(draft.currentRoundIndex);
+          if (draft?.selectedDeptLeader) setSelectedDeptLeader(draft.selectedDeptLeader);
+          // If user had progressed past intro, jump straight back into the questions
+          if (draft?.answers && Object.keys(draft.answers).length > 0) setStatus('ready');
+        }
+      } catch {}
+    }
   };
 
   const confirmDeptLeaderSelection = () => {
@@ -303,6 +335,7 @@ export default function SurveyPage() {
       if (respondent.id) {
         await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
       }
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       setStatus('done');
     }
   };
