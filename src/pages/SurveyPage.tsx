@@ -803,6 +803,16 @@ export default function SurveyPage() {
         <Progress value={progress} className="h-2" />
       </div>
 
+      {submitError && (
+        <div className="mx-4 mt-3 p-4 rounded-xl border-2 border-red-200 bg-red-50 text-sm">
+          <p className="font-medium text-red-800 mb-2">Falha ao enviar</p>
+          <p className="text-red-700 mb-3">{submitError}</p>
+          <Button onClick={submitRound} size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-100">
+            Reenviar respostas
+          </Button>
+        </div>
+      )}
+
       {/* Question */}
       <div className="flex-1 flex items-center justify-center p-4">
         {currentQ && (
