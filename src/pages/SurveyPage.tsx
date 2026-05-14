@@ -408,7 +408,7 @@ export default function SurveyPage() {
     : 0;
   const remainingQuestions = Math.max(0, totalQuestionsAllRounds - completedQuestionsAllRounds);
   const minutesRemaining = Math.max(1, Math.ceil(remainingQuestions * 0.4));
-  const isLastRound = currentRoundIndex >= totalRounds - 1 && !pendingDeptLeaderSelection;
+  const isLastRound = currentRoundIndex >= evaluationRounds.length - 1 && !pendingDeptLeaderSelection;
   const allAnswered = questions.every(q => {
     const ans = answers[q.id];
     if (ans === undefined) return false;
