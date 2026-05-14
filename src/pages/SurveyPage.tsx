@@ -64,6 +64,7 @@ export default function SurveyPage() {
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
   const [respondent, setRespondent] = useState<any>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Multi-round evaluation state
   const [evaluationRounds, setEvaluationRounds] = useState<EvaluationRound[]>([]);
@@ -94,6 +95,19 @@ export default function SurveyPage() {
       }));
     } catch {}
   }, [answers, justifications, currentIndex, currentRoundIndex, selectedDeptLeader, status, draftKey]);
+
+  // Warn before unload when there are unsaved answers
+  useEffect(() => {
+    const hasUnsaved = Object.keys(answers).length > 0 &&
+      status !== 'done' && status !== 'already_responded' && status !== 'no_evaluation' && status !== 'invalid';
+    if (!hasUnsaved) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [answers, status]);
 
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
@@ -231,8 +245,8 @@ export default function SurveyPage() {
           const draft = JSON.parse(raw);
           if (draft?.answers) setAnswers(draft.answers);
           if (draft?.justifications) setJustifications(draft.justifications);
-          if (typeof draft?.currentIndex === 'number') setCurrentIndex(draft.currentIndex);
-          if (typeof draft?.currentRoundIndex === 'number') setCurrentRoundIndex(draft.currentRoundIndex);
+          if (typeof draft?.currentIndex === 'number') setCurrentIndex(Math.max(0, draft.currentIndex));
+          if (typeof draft?.currentRoundIndex === 'number') setCurrentRoundIndex(Math.max(0, draft.currentRoundIndex));
           if (draft?.selectedDeptLeader) setSelectedDeptLeader(draft.selectedDeptLeader);
           // If user had progressed past intro, jump straight back into the questions
           if (draft?.answers && Object.keys(draft.answers).length > 0) setStatus('ready');
@@ -282,6 +296,7 @@ export default function SurveyPage() {
 
   const submitRound = async () => {
     if (!survey || !respondent) return;
+    setSubmitError(null);
     setStatus('submitting');
 
     const currentLeader = currentRound?.leaderName || null;
@@ -316,8 +331,33 @@ export default function SurveyPage() {
       }
     }
 
-    const { error } = await supabase.from('survey_responses').insert(responseRows);
-    if (error) { console.error('Submit error:', error); setStatus('ready'); return; }
+    // Retry with backoff: 0s, 2s, 5s. Timeout 30s per attempt.
+    const delays = [0, 2000, 5000];
+    let lastError: any = null;
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+      try {
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
+        const insertPromise = supabase.from('survey_responses').insert(responseRows).abortSignal(ctrl.signal);
+        const { error } = await insertPromise;
+        clearTimeout(timeoutId);
+        if (error) { lastError = error; continue; }
+        lastError = null;
+        break;
+      } catch (e: any) {
+        lastError = e;
+      }
+    }
+
+    if (lastError) {
+      console.error('Submit error after retries:', lastError);
+      setSubmitError(
+        'Não foi possível enviar suas respostas agora. Suas respostas estão salvas no seu navegador. Verifique sua conexão e clique em "Reenviar".'
+      );
+      setStatus('ready');
+      return;
+    }
 
     // Mark this round as completed
     const updatedRounds = [...evaluationRounds];
@@ -333,7 +373,9 @@ export default function SurveyPage() {
       setStatus('select_dept_leader');
     } else {
       if (respondent.id) {
-        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        try {
+          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        } catch (e) { console.error('Failed to mark respondent responded:', e); }
       }
       if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       setStatus('done');
@@ -760,6 +802,16 @@ export default function SurveyPage() {
         </div>
         <Progress value={progress} className="h-2" />
       </div>
+
+      {submitError && (
+        <div className="mx-4 mt-3 p-4 rounded-xl border-2 border-red-200 bg-red-50 text-sm">
+          <p className="font-medium text-red-800 mb-2">Falha ao enviar</p>
+          <p className="text-red-700 mb-3">{submitError}</p>
+          <Button onClick={submitRound} size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-100">
+            Reenviar respostas
+          </Button>
+        </div>
+      )}
 
       {/* Question */}
       <div className="flex-1 flex items-center justify-center p-4">
