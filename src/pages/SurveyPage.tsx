@@ -393,6 +393,22 @@ export default function SurveyPage() {
   const leaderQCount = allQuestions.filter(q => q.section_type === 'leadership').length;
   const leaderRounds = evaluationRounds.filter(r => r.roundType === 'leadership').length;
   const estimatedMinutes = Math.max(1, Math.ceil((orgQCount + leaderQCount * leaderRounds) * 0.4));
+
+  // Global progress across all rounds
+  const questionsPerRound = (round: EvaluationRound) =>
+    round.roundType === 'leadership' ? leaderQCount : orgQCount;
+  const totalQuestionsAllRounds = evaluationRounds.reduce((acc, r) => acc + questionsPerRound(r), 0);
+  const completedQuestionsAllRounds = evaluationRounds.reduce((acc, r, i) => {
+    if (r.completed) return acc + questionsPerRound(r);
+    if (i === currentRoundIndex) return acc + answeredCount;
+    return acc;
+  }, 0);
+  const overallProgress = totalQuestionsAllRounds > 0
+    ? Math.round((completedQuestionsAllRounds / totalQuestionsAllRounds) * 100)
+    : 0;
+  const remainingQuestions = Math.max(0, totalQuestionsAllRounds - completedQuestionsAllRounds);
+  const minutesRemaining = Math.max(1, Math.ceil(remainingQuestions * 0.4));
+  const isLastRound = currentRoundIndex >= totalRounds - 1 && !pendingDeptLeaderSelection;
   const allAnswered = questions.every(q => {
     const ans = answers[q.id];
     if (ans === undefined) return false;
