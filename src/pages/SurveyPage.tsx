@@ -26,7 +26,7 @@ interface SurveyData {
   scale_min: number;
   scale_max: number;
   scale_labels: string[];
-  leaders: { name: string; type: 'company' | 'department' }[];
+  leaders: { name: string; type: 'company' | 'department'; hidden?: boolean }[];
 }
 
 interface CompanyBranding {
@@ -117,11 +117,11 @@ export default function SurveyPage() {
       labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
     } catch { labels = []; }
 
-    let leaders: { name: string; type: 'company' | 'department' }[] = [];
+    let leaders: { name: string; type: 'company' | 'department'; hidden?: boolean }[] = [];
     try {
       const raw = surveyData.leaders;
       if (Array.isArray(raw)) {
-        leaders = raw.map((l: any) => ({ name: l.name || l, type: l.type || 'company' }));
+        leaders = raw.map((l: any) => ({ name: l.name || l, type: l.type || 'company', hidden: !!l.hidden }));
       }
     } catch { leaders = []; }
 
@@ -405,7 +405,7 @@ export default function SurveyPage() {
 
   // Department leader selection screen
   if (status === 'select_dept_leader') {
-    const deptLeaders = survey?.leaders.filter(l => l.type === 'department') || [];
+    const deptLeaders = survey?.leaders.filter(l => l.type === 'department' && !l.hidden) || [];
     return (
       <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
         <header className="p-4 flex items-center gap-3 border-b bg-white/80 backdrop-blur-sm">
