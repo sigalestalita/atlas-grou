@@ -96,6 +96,19 @@ export default function SurveyPage() {
     } catch {}
   }, [answers, justifications, currentIndex, currentRoundIndex, selectedDeptLeader, status, draftKey]);
 
+  // Warn before unload when there are unsaved answers
+  useEffect(() => {
+    const hasUnsaved = Object.keys(answers).length > 0 &&
+      status !== 'done' && status !== 'already_responded' && status !== 'no_evaluation' && status !== 'invalid';
+    if (!hasUnsaved) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [answers, status]);
+
   useEffect(() => { loadSurvey(); }, [slug, token]);
 
   const loadSurvey = async () => {
