@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, LayoutDashboard, FileText, Users, Link2, BarChart3, UserCheck } from 'lucide-react';
+import { Building2, LayoutDashboard, FileText, Users, Link2, BarChart3, UserCheck, Activity, MessageSquare } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Company {
@@ -33,6 +33,8 @@ export default function CompanyView() {
     { label: 'Avaliações', path: 'evaluations', icon: UserCheck },
     { label: 'Links', path: 'links', icon: Link2 },
     { label: 'Progresso', path: 'progress', icon: BarChart3 },
+    { label: 'Acompanhamento', path: 'tracking', icon: Activity },
+    { label: 'Respostas', path: 'responses', icon: MessageSquare },
   ];
 
   return (
