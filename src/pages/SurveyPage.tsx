@@ -1000,16 +1000,17 @@ export default function SurveyPage() {
 
           {currentIndex === questions.length - 1 && allAnswered ? (
             <Button
-              onClick={submitRound}
+              onClick={() => isLastRound ? setConfirmOpen(true) : submitRound()}
               disabled={status === 'submitting'}
               style={{ backgroundColor: primaryColor }}
               className="text-white"
             >
               {status === 'submitting' ? 'Enviando...' : (
-                currentRoundIndex < totalRounds - 1
+                !isLastRound
                   ? 'Finalizar e Próxima Etapa'
-                  : 'Enviar Respostas'
+                  : 'Revisar e Enviar'
               )}
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
             <Button
@@ -1022,6 +1023,38 @@ export default function SurveyPage() {
           )}
         </div>
       </footer>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enviar suas respostas?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Você está prestes a finalizar a pesquisa. Após o envio, <strong>não será possível alterar</strong> suas respostas.
+                </p>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Etapas concluídas:</span><strong>{completedRounds + 1} de {totalRounds}</strong></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Perguntas respondidas:</span><strong>{completedQuestionsAllRounds + (allAnswered ? 0 : 0)}/{totalQuestionsAllRounds}</strong></div>
+                </div>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Shield className="h-3 w-3" /> Suas respostas são 100% anônimas.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmOpen(false); submitRound(); }}
+              style={{ backgroundColor: primaryColor }}
+              className="text-white"
+            >
+              Confirmar envio
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
