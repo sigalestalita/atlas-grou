@@ -294,8 +294,9 @@ export default function SurveyPage() {
     }
   };
 
-  const submitRound = async () => {
+  const submitRound = async (isRetry = false) => {
     if (!survey || !respondent) return;
+    setSubmitError(null);
     setStatus('submitting');
 
     const currentLeader = currentRound?.leaderName || null;
@@ -330,8 +331,33 @@ export default function SurveyPage() {
       }
     }
 
-    const { error } = await supabase.from('survey_responses').insert(responseRows);
-    if (error) { console.error('Submit error:', error); setStatus('ready'); return; }
+    // Retry with backoff: 0s, 2s, 5s. Timeout 30s per attempt.
+    const delays = [0, 2000, 5000];
+    let lastError: any = null;
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+      try {
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
+        const insertPromise = supabase.from('survey_responses').insert(responseRows).abortSignal(ctrl.signal);
+        const { error } = await insertPromise;
+        clearTimeout(timeoutId);
+        if (error) { lastError = error; continue; }
+        lastError = null;
+        break;
+      } catch (e: any) {
+        lastError = e;
+      }
+    }
+
+    if (lastError) {
+      console.error('Submit error after retries:', lastError);
+      setSubmitError(
+        'Não foi possível enviar suas respostas agora. Suas respostas estão salvas no seu navegador. Verifique sua conexão e clique em "Reenviar".'
+      );
+      setStatus('ready');
+      return;
+    }
 
     // Mark this round as completed
     const updatedRounds = [...evaluationRounds];
@@ -347,7 +373,9 @@ export default function SurveyPage() {
       setStatus('select_dept_leader');
     } else {
       if (respondent.id) {
-        await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        try {
+          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
+        } catch (e) { console.error('Failed to mark respondent responded:', e); }
       }
       if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       setStatus('done');
