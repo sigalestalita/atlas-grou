@@ -4,7 +4,7 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar,
 } from '@/components/ui/sidebar';
-import { Building2, FileText, Users, LayoutDashboard, LogOut, Settings, BarChart3, Link2, UserCog, MessageSquare, Activity } from 'lucide-react';
+import { Building2, FileText, Users, LayoutDashboard, LogOut, Settings, BarChart3, Link2, UserCog, MessageSquare, Activity, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const superAdminItems = [
