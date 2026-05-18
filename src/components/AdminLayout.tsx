@@ -21,6 +21,7 @@ const companyAdminItems = [
   { title: 'Progresso', url: '/admin/progress', icon: BarChart3 },
   { title: 'Acompanhamento', url: '/admin/tracking', icon: Activity },
   { title: 'Respostas', url: '/admin/responses', icon: MessageSquare },
+  { title: 'Exportar', url: '/admin/export', icon: Download },
 ];
 
 function AdminSidebar() {
