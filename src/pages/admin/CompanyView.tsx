@@ -35,6 +35,7 @@ export default function CompanyView() {
     { label: 'Progresso', path: 'progress', icon: BarChart3 },
     { label: 'Acompanhamento', path: 'tracking', icon: Activity },
     { label: 'Respostas', path: 'responses', icon: MessageSquare },
+    { label: 'Exportar', path: 'export', icon: Download },
   ];
 
   return (
