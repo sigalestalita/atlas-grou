@@ -22,8 +22,8 @@ interface LeaderDetail {
   count: number;
   score: number;
   questionAvgs: { question: string; questionFull: string; avg: number; section: string }[];
-  strengths: { question: string; avg: number }[];
-  weaknesses: { question: string; avg: number }[];
+  strengths: { question: string; questionFull: string; avg: number }[];
+  weaknesses: { question: string; questionFull: string; avg: number }[];
 }
 
 const LEADER_COLORS = [
@@ -44,7 +44,7 @@ export default function Dashboard() {
   const companyId = params.companyId || context?.company?.id || authCompanyId;
 
   const [stats, setStats] = useState({ total: 0, responded: 0, rate: 0 });
-  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; avg: number; section: string }[]>([]);
+  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; nameFull: string; avg: number; section: string }[]>([]);
   const [deptAvgs, setDeptAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderAvgs, setLeaderAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderDetails, setLeaderDetails] = useState<LeaderDetail[]>([]);
@@ -148,7 +148,7 @@ export default function Dashboard() {
       const vals = qMap.get(q.id) || [];
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
       const section = sections?.find(s => s.id === q.section_id)?.title || '';
-      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), avg: Math.round(avg * 100) / 100, section };
+      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section };
     });
     setQuestionAvgs(qAvgs);
 
@@ -272,7 +272,7 @@ export default function Dashboard() {
     if (questionAvgs.length > 0) {
       result.push({
         key: 'questions', label: 'Média por Pergunta', description: 'Média de cada pergunta da pesquisa',
-        data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.name, q.section, q.avg]) },
+        data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.nameFull, q.section, q.avg]) },
       });
     }
     if (deptAvgs.length > 0) {
@@ -286,8 +286,8 @@ export default function Dashboard() {
         key: 'leaders_overview', label: 'Visão Geral por Liderança', description: 'Score e média de cada líder avaliado',
         data: { headers: ['Líder', 'Média', 'Score', 'Avaliações', 'Destaque Positivo', 'Ponto de Atenção'], rows: leaderDetails.map(l => [
           l.name, l.avg, `${l.score}pts`, `~${l.count}`,
-          l.strengths[0] ? `${l.strengths[0].question} (${l.strengths[0].avg})` : '-',
-          l.weaknesses[0] ? `${l.weaknesses[0].question} (${l.weaknesses[0].avg})` : '-',
+          l.strengths[0] ? `${l.strengths[0].questionFull} (${l.strengths[0].avg})` : '-',
+          l.weaknesses[0] ? `${l.weaknesses[0].questionFull} (${l.weaknesses[0].avg})` : '-',
         ])},
       });
       for (const leader of leaderDetails) {
@@ -301,8 +301,8 @@ export default function Dashboard() {
       result.push({
         key: 'insights', label: 'Pontos Fortes e de Atenção', description: 'Top 3 melhores e piores resultados',
         data: { headers: ['Tipo', 'Pergunta', 'Média'], rows: [
-          ...strong.map(q => ['✅ Ponto Forte', q.name, q.avg] as (string | number)[]),
-          ...weak.map(q => ['⚠️ Atenção', q.name, q.avg] as (string | number)[]),
+          ...strong.map(q => ['✅ Ponto Forte', q.nameFull, q.avg] as (string | number)[]),
+          ...weak.map(q => ['⚠️ Atenção', q.nameFull, q.avg] as (string | number)[]),
         ]},
       });
     }
