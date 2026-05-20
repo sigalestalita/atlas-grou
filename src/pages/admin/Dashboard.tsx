@@ -148,7 +148,7 @@ export default function Dashboard() {
       const vals = qMap.get(q.id) || [];
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
       const section = sections?.find(s => s.id === q.section_id)?.title || '';
-      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), avg: Math.round(avg * 100) / 100, section };
+      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section };
     });
     setQuestionAvgs(qAvgs);
 
