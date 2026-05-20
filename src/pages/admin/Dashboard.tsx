@@ -22,8 +22,8 @@ interface LeaderDetail {
   count: number;
   score: number;
   questionAvgs: { question: string; questionFull: string; avg: number; section: string }[];
-  strengths: { question: string; avg: number }[];
-  weaknesses: { question: string; avg: number }[];
+  strengths: { question: string; questionFull: string; avg: number }[];
+  weaknesses: { question: string; questionFull: string; avg: number }[];
 }
 
 const LEADER_COLORS = [
