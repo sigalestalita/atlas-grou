@@ -9,6 +9,39 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Download, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import {
+  Chart,
+  BarController,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+  Title,
+  DoughnutController,
+  ArcElement,
+} from 'chart.js';
+
+Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, Title, DoughnutController, ArcElement);
+
+// Render a Chart.js config to PNG buffer (offscreen canvas)
+async function renderChartPng(config: any, width = 900, height = 450): Promise<ArrayBuffer> {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  // Hidden but in DOM for safety
+  canvas.style.position = 'fixed';
+  canvas.style.left = '-99999px';
+  document.body.appendChild(canvas);
+  const chart = new Chart(canvas, { ...config, options: { ...(config.options || {}), animation: false, responsive: false, devicePixelRatio: 2 } });
+  chart.update('none');
+  const dataUrl = canvas.toDataURL('image/png');
+  chart.destroy();
+  canvas.remove();
+  const res = await fetch(dataUrl);
+  return await res.arrayBuffer();
+}
 
 interface ContextType { company: { id: string } }
 
