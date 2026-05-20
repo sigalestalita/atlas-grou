@@ -272,7 +272,7 @@ export default function Dashboard() {
     if (questionAvgs.length > 0) {
       result.push({
         key: 'questions', label: 'Média por Pergunta', description: 'Média de cada pergunta da pesquisa',
-        data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.name, q.section, q.avg]) },
+        data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.nameFull, q.section, q.avg]) },
       });
     }
     if (deptAvgs.length > 0) {
