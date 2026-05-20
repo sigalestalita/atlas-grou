@@ -418,7 +418,7 @@ export default function ExportPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={exportData}><Download className="mr-2 h-4 w-4" />Exportar Excel</Button>
+            <Button onClick={exportData} disabled={generating}><Download className="mr-2 h-4 w-4" />{generating ? 'Gerando...' : 'Exportar Excel'}</Button>
           </div>
         </CardContent>
       </Card>
