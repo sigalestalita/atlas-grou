@@ -276,6 +276,16 @@ export default function Dashboard() {
         key: 'questions', label: 'Média por Pergunta', description: 'Média de cada pergunta da pesquisa',
         data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.nameFull, q.section, q.avg]) },
       });
+      const scoreHeaders = Array.from({ length: scaleMax }, (_, i) => `Nota ${i + 1}`);
+      result.push({
+        key: 'questions_distribution',
+        label: 'Distribuição de Notas por Pergunta',
+        description: `Quantidade de respostas em cada nota (1 a ${scaleMax}) para cada pergunta`,
+        data: {
+          headers: ['Pergunta', 'Respostas', ...scoreHeaders, 'Média'],
+          rows: questionAvgs.map(q => [q.nameFull, q.n, ...q.dist, q.avg]),
+        },
+      });
     }
     if (deptAvgs.length > 0) {
       result.push({
