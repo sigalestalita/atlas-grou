@@ -301,8 +301,8 @@ export default function Dashboard() {
       result.push({
         key: 'insights', label: 'Pontos Fortes e de Atenção', description: 'Top 3 melhores e piores resultados',
         data: { headers: ['Tipo', 'Pergunta', 'Média'], rows: [
-          ...strong.map(q => ['✅ Ponto Forte', q.name, q.avg] as (string | number)[]),
-          ...weak.map(q => ['⚠️ Atenção', q.name, q.avg] as (string | number)[]),
+          ...strong.map(q => ['✅ Ponto Forte', q.nameFull, q.avg] as (string | number)[]),
+          ...weak.map(q => ['⚠️ Atenção', q.nameFull, q.avg] as (string | number)[]),
         ]},
       });
     }
