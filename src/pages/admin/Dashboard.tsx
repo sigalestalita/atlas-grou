@@ -148,7 +148,9 @@ export default function Dashboard() {
       const vals = qMap.get(q.id) || [];
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
       const section = sections?.find(s => s.id === q.section_id)?.title || '';
-      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section };
+      const dist = new Array(survey.scale_max).fill(0);
+      vals.forEach(v => { if (v >= 1 && v <= survey.scale_max) dist[v - 1]++; });
+      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section, dist, n: vals.length };
     });
     setQuestionAvgs(qAvgs);
 
