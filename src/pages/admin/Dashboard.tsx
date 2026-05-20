@@ -54,7 +54,7 @@ export default function Dashboard() {
   const [showExport, setShowExport] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [surveyTitle, setSurveyTitle] = useState('');
-  const [companyBranding, setCompanyBranding] = useState<{ primary: string; secondary: string }>({ primary: '#ff5700', secondary: '#03104f' });
+  const [companyBranding, setCompanyBranding] = useState<{ primary: string; secondary: string; logoUrl?: string }>({ primary: '#ff5700', secondary: '#03104f' });
 
   // Leader filter
   const [availableLeaders, setAvailableLeaders] = useState<string[]>([]);
