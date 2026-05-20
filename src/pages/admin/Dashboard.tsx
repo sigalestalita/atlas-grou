@@ -44,7 +44,7 @@ export default function Dashboard() {
   const companyId = params.companyId || context?.company?.id || authCompanyId;
 
   const [stats, setStats] = useState({ total: 0, responded: 0, rate: 0 });
-  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; avg: number; section: string }[]>([]);
+  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; nameFull: string; avg: number; section: string }[]>([]);
   const [deptAvgs, setDeptAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderAvgs, setLeaderAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderDetails, setLeaderDetails] = useState<LeaderDetail[]>([]);
