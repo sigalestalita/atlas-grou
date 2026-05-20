@@ -286,8 +286,8 @@ export default function Dashboard() {
         key: 'leaders_overview', label: 'Visão Geral por Liderança', description: 'Score e média de cada líder avaliado',
         data: { headers: ['Líder', 'Média', 'Score', 'Avaliações', 'Destaque Positivo', 'Ponto de Atenção'], rows: leaderDetails.map(l => [
           l.name, l.avg, `${l.score}pts`, `~${l.count}`,
-          l.strengths[0] ? `${l.strengths[0].question} (${l.strengths[0].avg})` : '-',
-          l.weaknesses[0] ? `${l.weaknesses[0].question} (${l.weaknesses[0].avg})` : '-',
+          l.strengths[0] ? `${l.strengths[0].questionFull} (${l.strengths[0].avg})` : '-',
+          l.weaknesses[0] ? `${l.weaknesses[0].questionFull} (${l.weaknesses[0].avg})` : '-',
         ])},
       });
       for (const leader of leaderDetails) {
