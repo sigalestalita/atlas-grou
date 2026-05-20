@@ -44,7 +44,7 @@ export default function Dashboard() {
   const companyId = params.companyId || context?.company?.id || authCompanyId;
 
   const [stats, setStats] = useState({ total: 0, responded: 0, rate: 0 });
-  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; nameFull: string; avg: number; section: string }[]>([]);
+  const [questionAvgs, setQuestionAvgs] = useState<{ name: string; nameFull: string; avg: number; section: string; dist: number[]; n: number }[]>([]);
   const [deptAvgs, setDeptAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderAvgs, setLeaderAvgs] = useState<{ name: string; avg: number }[]>([]);
   const [leaderDetails, setLeaderDetails] = useState<LeaderDetail[]>([]);
@@ -148,7 +148,9 @@ export default function Dashboard() {
       const vals = qMap.get(q.id) || [];
       const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
       const section = sections?.find(s => s.id === q.section_id)?.title || '';
-      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section };
+      const dist = new Array(survey.scale_max).fill(0);
+      vals.forEach(v => { if (v >= 1 && v <= survey.scale_max) dist[v - 1]++; });
+      return { name: q.text.substring(0, 40) + (q.text.length > 40 ? '...' : ''), nameFull: q.text, avg: Math.round(avg * 100) / 100, section, dist, n: vals.length };
     });
     setQuestionAvgs(qAvgs);
 
@@ -273,6 +275,16 @@ export default function Dashboard() {
       result.push({
         key: 'questions', label: 'Média por Pergunta', description: 'Média de cada pergunta da pesquisa',
         data: { headers: ['Pergunta', 'Categoria', 'Média'], rows: questionAvgs.map(q => [q.nameFull, q.section, q.avg]) },
+      });
+      const scoreHeaders = Array.from({ length: scaleMax }, (_, i) => `Nota ${i + 1}`);
+      result.push({
+        key: 'questions_distribution',
+        label: 'Distribuição de Notas por Pergunta',
+        description: `Quantidade de respostas em cada nota (1 a ${scaleMax}) para cada pergunta`,
+        data: {
+          headers: ['Pergunta', 'Respostas', ...scoreHeaders, 'Média'],
+          rows: questionAvgs.map(q => [q.nameFull, q.n, ...q.dist, q.avg]),
+        },
       });
     }
     if (deptAvgs.length > 0) {
