@@ -71,7 +71,7 @@ export default function ExportPage() {
 
       const qList = questions || [];
       const sectionsList = sections || [];
-      const scaleQuestions = qList.filter(q => q.question_type === 'scale' || q.value != null || true).filter(q => q.question_type !== 'open_text');
+      const scaleQuestions = qList.filter(q => q.question_type !== 'open_text');
 
       // Group responses
       const groups = new Map<string, Map<string, number[]>>();
