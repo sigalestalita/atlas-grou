@@ -346,7 +346,7 @@ export default function Dashboard() {
         companyName={companyName || context?.company?.name || 'Empresa'}
         surveyTitle={surveyTitle}
         sections={buildReportSections()}
-        branding={{ primary: companyBranding.primary, secondary: companyBranding.secondary }}
+        branding={{ primary: companyBranding.primary, secondary: companyBranding.secondary, logoUrl: companyBranding.logoUrl }}
       />
 
       {/* KPI Cards */}
