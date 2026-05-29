@@ -115,13 +115,10 @@ Deno.serve(async (req) => {
 
     const normalize = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
 
-    const buildQuestionStats = (q: any, rs: any[]) => {
-      const respondent_count = countRespondents(rs);
+    const buildQuestionStats = (q: any, rs: any[], useTotal = false) => {
+      const respondent_count = countRespondents(rs, useTotal);
       if (q.question_type === "text") {
-        const raw = rs
-          .map((r) => (r.text_value ?? "").trim())
-          .filter((t) => t.length > 0);
-        // Dedup by normalized text — removes re-submissions/duplicate entries
+        const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
         const seen = new Set<string>();
         const comments: string[] = [];
         for (const t of raw) {
@@ -136,32 +133,25 @@ Deno.serve(async (req) => {
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
       let total = 0;
       rs.forEach((r) => {
-        if (r.value != null && dist[r.value] !== undefined) {
-          dist[r.value]++;
-          total++;
-        }
+        if (r.value != null && dist[r.value] !== undefined) { dist[r.value]++; total++; }
       });
       const distribution = Object.entries(dist).map(([value, count]) => ({
-        value: Number(value),
-        count,
-        percent: total > 0 ? (count / total) * 100 : 0,
+        value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
       }));
       return { ...q, type: "scale", total, respondent_count, distribution };
     };
 
-    const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean) => {
+    const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean, useTotal = false) => {
       const catResponses = (responses ?? []).filter(filter);
-      const respondent_count = countRespondents(catResponses);
+      const respondent_count = countRespondents(catResponses, useTotal);
       return {
-        key,
-        label,
-        respondent_count,
-        questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter))),
+        key, label, respondent_count,
+        questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter), useTotal)),
       };
     };
 
     const categories = [
-      buildCategory("organizacional", "Organizacional", orgQuestions, (r) => !r.evaluated_leader),
+      buildCategory("organizacional", "Organizacional", orgQuestions, (r) => !r.evaluated_leader, true),
       buildCategory("lider-area", "Líder de Área", leaderQuestions,
         (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX),
       buildCategory("cid", "Cid Lauro Vale Junior", leaderQuestions, (r) => r.evaluated_leader === CID),
