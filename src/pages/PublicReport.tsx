@@ -236,7 +236,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
         <section key={sectionTitle} className="space-y-4">
           <div className="flex items-center gap-3 sticky top-0 bg-muted/30 backdrop-blur z-10 py-2">
             <div className="h-8 w-1 bg-primary rounded-full" />
-            <h3 className="text-lg font-bold font-display">{sectionTitle}</h3>
+            <h3 className="text-lg font-bold font-display">{sectionTitle.replace(/^\s*\d+(\.\d+)*[.\)\-:]?\s*/, "")}</h3>
             <Badge variant="outline" className="ml-auto text-xs">
               {qs.length} {qs.length === 1 ? "pergunta" : "perguntas"}
             </Badge>
