@@ -12,6 +12,7 @@ type Question = {
   type: "scale" | "text";
   total: number;
   raw_total?: number;
+  duplicates_removed?: number;
   respondent_count?: number;
   respondent_count_approx?: boolean;
   distribution?: Distribution[];
@@ -232,9 +233,9 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 {" "}{(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
               </span>
             )}
-            {isText && q.raw_total !== undefined && q.raw_total > q.total && (
+            {isText && (q.duplicates_removed ?? 0) > 0 && (
               <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium">
-                {q.raw_total - q.total} duplicado{q.raw_total - q.total === 1 ? "" : "s"} removido{q.raw_total - q.total === 1 ? "" : "s"}
+                {q.duplicates_removed} comentário{q.duplicates_removed === 1 ? "" : "s"} pode{q.duplicates_removed === 1 ? "" : "m"} ser de repreenchimentos/pesquisas refeitas
               </span>
             )}
           </div>
