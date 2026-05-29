@@ -17,11 +17,10 @@ type Question = {
   raw_total?: number;
   duplicates_removed?: number;
   respondent_count?: number;
-  respondent_count_approx?: boolean;
   distribution?: Distribution[];
   comments?: string[];
 };
-type Category = { key: string; label: string; respondent_count?: number; respondent_count_approx?: boolean; questions: Question[] };
+type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
 type ReportData = {
   company: { name: string; logo_url?: string; primary_color: string; secondary_color: string };
   survey: { title: string; scale_min: number; scale_max: number };
@@ -147,7 +146,8 @@ export default function PublicReport() {
             {data.categories.map((c) => {
               const isActive = c.key === current.key;
               const count = c.respondent_count ?? 0;
-              const approx = c.respondent_count_approx;
+              const total = c.respondent_total;
+              const display = total != null ? `${count}/${total}` : `${count}`;
               return (
                 <button
                   key={c.key}
@@ -163,9 +163,9 @@ export default function PublicReport() {
                     className={`grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 font-mono text-[10px] tabular-nums ${
                       isActive ? "bg-[#9ec5ff] text-[#020617]" : "bg-white/10 text-white/60"
                     }`}
-                    title={`${count} respondente${count === 1 ? "" : "s"}`}
+                    title={total != null ? `${count} de ${total} respondentes` : `${count} respondentes`}
                   >
-                    {count}
+                    {display}
                   </span>
                 </button>
               );
@@ -211,7 +211,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   }
 
   const respondents = category.respondent_count ?? 0;
-  const approx = category.respondent_count_approx;
+  const total = category.respondent_total;
 
   let qIdx = 0;
   return (
@@ -224,10 +224,10 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
         </div>
         <div className="text-right">
           <p className="text-3xl font-bold font-display tabular-nums">
-            {respondents}
+            {respondents}{total != null ? <span className="text-muted-foreground/70 text-2xl"> / {total}</span> : null}
           </p>
           <p className="text-xs text-muted-foreground">
-            {respondents === 1 ? "respondente" : "respondentes"}
+            {total != null ? "respondentes" : (respondents === 1 ? "respondente" : "respondentes")}
           </p>
         </div>
       </div>
