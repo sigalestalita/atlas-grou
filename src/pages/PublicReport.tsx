@@ -101,7 +101,7 @@ export default function PublicReport() {
               <nav className="flex flex-col gap-1">
                 {data.categories.map((c) => {
                   const isActive = c.key === current.key;
-                  const total = c.questions.reduce((a, q) => a + q.total, 0);
+                  const count = c.respondent_count ?? 0;
                   return (
                     <button
                       key={c.key}
@@ -117,8 +117,9 @@ export default function PublicReport() {
                         className={`text-xs px-1.5 py-0.5 rounded font-mono ${
                           isActive ? "bg-white/20" : "bg-muted text-muted-foreground"
                         }`}
+                        title={`${count} respondente${count === 1 ? "" : "s"}`}
                       >
-                        {total}
+                        {count}
                       </span>
                     </button>
                   );
