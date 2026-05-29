@@ -109,7 +109,7 @@ export function IntroSplash({ companyLogoUrl, companyName, title, eyebrow }: Pro
           <img
             src={companyLogoUrl}
             alt={companyName}
-            className="h-14 w-auto max-w-[45vw] object-contain opacity-0 brightness-0 invert drop-shadow-[0_2px_18px_rgba(0,0,0,0.6)] md:h-28 md:max-w-none animate-[introLogoRight_900ms_ease-out_200ms_forwards]"
+            className="h-14 w-auto max-w-[45vw] object-contain opacity-0 drop-shadow-[0_2px_18px_rgba(0,0,0,0.6)] md:h-28 md:max-w-none animate-[introLogoRight_900ms_ease-out_200ms_forwards]"
           />
         )}
       </div>
