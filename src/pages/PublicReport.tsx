@@ -146,7 +146,8 @@ export default function PublicReport() {
             {data.categories.map((c) => {
               const isActive = c.key === current.key;
               const count = c.respondent_count ?? 0;
-              const approx = c.respondent_count_approx;
+              const total = c.respondent_total;
+              const display = total != null ? `${count}/${total}` : `${count}`;
               return (
                 <button
                   key={c.key}
@@ -162,9 +163,9 @@ export default function PublicReport() {
                     className={`grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 font-mono text-[10px] tabular-nums ${
                       isActive ? "bg-[#9ec5ff] text-[#020617]" : "bg-white/10 text-white/60"
                     }`}
-                    title={`${count} respondente${count === 1 ? "" : "s"}`}
+                    title={total != null ? `${count} de ${total} respondentes` : `${count} respondentes`}
                   >
-                    {count}
+                    {display}
                   </span>
                 </button>
               );
