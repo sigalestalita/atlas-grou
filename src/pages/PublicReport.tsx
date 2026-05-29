@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquareQuote, BarChart3 } from "lucide-react";
 import { IntroSplash } from "@/components/IntroSplash";
+import grouLogo from "@/assets/grou-logo.png";
+import introBg from "@/assets/intro-bg.png";
 
 type Distribution = { value: number; count: number; percent: number };
 type Question = {
