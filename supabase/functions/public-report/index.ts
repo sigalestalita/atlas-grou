@@ -83,67 +83,39 @@ Deno.serve(async (req) => {
 
     const totalRespondents = respList?.length ?? 0;
 
-    // ---- Clusterizar TODAS as submissões em "tentativas" ----
-    // Cada tentativa é uma sequência de sessões consecutivas (gap < CLUSTER_GAP).
-    // Se uma pessoa reabriu o link horas/dias depois, ela gera 2 tentativas separadas.
-    const allSessionTimes = Array.from(
-      new Set((responses ?? []).map((r: any) => new Date(r.submitted_at).getTime())),
-    ).sort((a, b) => a - b);
-
-    type Attempt = { start: number; end: number; sessions: Set<number> };
-    const attempts: Attempt[] = [];
-    for (const t of allSessionTimes) {
-      const last = attempts[attempts.length - 1];
-      if (last && t - last.end <= CLUSTER_GAP_MS) {
-        last.end = t;
-        last.sessions.add(t);
-      } else {
-        attempts.push({ start: t, end: t, sessions: new Set([t]) });
-      }
-    }
-
-    // Mapear cada respondent à sua tentativa "válida":
-    // a tentativa cujo range [start - tolerance, end + tolerance] contém responded_at.
-    // Se houver várias, escolher aquela cujo `end` é mais próximo do responded_at.
-    const validAttempts = new Set<Attempt>();
-    const attemptByRespondent = new Map<string, Attempt>();
-    for (const r of respTimes) {
-      let best: { attempt: Attempt; diff: number } | null = null;
-      for (const a of attempts) {
-        if (r.t < a.start - ATTEMPT_MATCH_TOLERANCE_MS) continue;
-        if (r.t > a.end + ATTEMPT_MATCH_TOLERANCE_MS) continue;
-        const diff = Math.abs(a.end - r.t);
-        if (!best || diff < best.diff) best = { attempt: a, diff };
-      }
-      if (best) {
-        validAttempts.add(best.attempt);
-        attemptByRespondent.set(r.id, best.attempt);
-      }
-    }
-
-    // Sessões consideradas válidas = pertencem a uma tentativa válida.
-    const validSessions = new Set<number>();
-    for (const a of validAttempts) {
-      for (const s of a.sessions) validSessions.add(s);
-    }
-
-    // Mapear sessão -> respondent (via tentativa)
-    const sessionToRespondent = new Map<number, string>();
-    for (const [respId, attempt] of attemptByRespondent) {
-      for (const s of attempt.sessions) sessionToRespondent.set(s, respId);
-    }
-
-    // Helper: para um conjunto de respostas de um bucket, retornar sessões válidas
-    // e quantos respondents distintos estão cobertos por essas sessões.
+    // Helper: deduplica sessões consecutivas no mesmo bucket separadas por gap pequeno
+    // (resubmissão da mesma pessoa — mantém a mais recente), depois pareia cada sessão
+    // restante a um respondent via responded_at.
     const pairSessions = (rs: any[]): { paired: Set<number>; respondentCount: number } => {
-      const paired = new Set<number>();
+      const allSessions = Array.from(
+        new Set(rs.map((r: any) => new Date(r.submitted_at).getTime())),
+      ).sort((a, b) => a - b);
+
+      const dedupedSessions: number[] = [];
+      for (let i = 0; i < allSessions.length; i++) {
+        const cur = allSessions[i];
+        const next = allSessions[i + 1];
+        if (next != null && next - cur < DUPLICATE_GAP_MS) continue; // descarta a anterior
+        dedupedSessions.push(cur);
+      }
+
+      const used = new Set<number>();
+      const paired = new Set<number>(dedupedSessions);
       const covered = new Set<string>();
-      for (const r of rs) {
-        const t = new Date(r.submitted_at).getTime();
-        if (!validSessions.has(t)) continue;
-        paired.add(t);
-        const rid = sessionToRespondent.get(t);
-        if (rid) covered.add(rid);
+      const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
+      for (const r of sortedResp) {
+        const lo = r.t - WINDOW_BEFORE;
+        const hi = r.t + WINDOW_AFTER;
+        let best: { s: number; abs: number } | null = null;
+        for (const s of dedupedSessions) {
+          if (s < lo || s > hi || used.has(s)) continue;
+          const abs = Math.abs(s - r.t);
+          if (!best || abs < best.abs) best = { s, abs };
+        }
+        if (best) {
+          used.add(best.s);
+          covered.add(r.id);
+        }
       }
       return { paired, respondentCount: covered.size };
     };
