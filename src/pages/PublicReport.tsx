@@ -39,7 +39,10 @@ const SCORE_COLORS: Record<number, string> = {
 };
 
 export default function PublicReport() {
-  const { slug } = useParams();
+  const params = useParams();
+  // Support both /relatorio/:slug and /result-<slug> (via /:resultSlug)
+  const slug = params.slug
+    ?? (params.resultSlug?.startsWith("result-") ? params.resultSlug.slice("result-".length) : undefined);
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
