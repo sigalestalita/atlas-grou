@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquareQuote, BarChart3 } from "lucide-react";
+import { IntroSplash } from "@/components/IntroSplash";
 
 type Distribution = { value: number; count: number; percent: number };
 type Question = {
@@ -74,6 +75,13 @@ export default function PublicReport() {
   const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
 
   return (
+    <>
+      <IntroSplash
+        companyLogoUrl={data.company.logo_url}
+        companyName={data.company.name}
+        eyebrow="Pesquisa de Clima Organizacional"
+        title={data.survey.title}
+      />
     <div className="min-h-screen bg-muted/30">
       {/* Header */}
       <header
