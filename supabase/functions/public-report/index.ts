@@ -9,11 +9,13 @@ const corsHeaders = {
 const CID = "Cid Lauro Vale Junior";
 const ALEX = "Alexandre Daguano";
 
-// Janela de pareamento sessão↔respondent. Cada respondent finaliza ao enviar o último
-// bloco — então a sessão "real" daquele bucket fica a poucos segundos do responded_at.
-// Janela apertada evita que sessões duplicadas (resubmissões antigas) sejam contadas.
-const WINDOW_BEFORE = 8 * 60 * 1000;  // 8 min antes
-const WINDOW_AFTER = 8 * 60 * 1000;   // 8 min depois
+// Gap máximo entre sessões consecutivas para considerá-las parte da mesma "tentativa"
+// (mesma pessoa preenchendo a pesquisa em sequência). Tentativas separadas por um gap
+// maior são tratadas como resubmissões — só a tentativa que CONTÉM o responded_at do
+// respondent conta; as outras são descartadas como duplicatas.
+const CLUSTER_GAP_MS = 30 * 60 * 1000; // 30 min
+// Tolerância para casar uma tentativa ao responded_at do respondent.
+const ATTEMPT_MATCH_TOLERANCE_MS = 5 * 60 * 1000; // 5 min
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
