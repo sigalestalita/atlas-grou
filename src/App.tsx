@@ -50,6 +50,7 @@ const App = () => (
 
             {/* Public shareable report */}
             <Route path="/relatorio/:slug" element={<PublicReport />} />
+            <Route path="/result-:slug" element={<PublicReport />} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
