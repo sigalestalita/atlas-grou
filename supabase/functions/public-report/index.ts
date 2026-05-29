@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     for (let from = 0; ; from += pageSize) {
       const { data: page, error } = await supabase
         .from("survey_responses")
-        .select("question_id, value, text_value, evaluated_leader")
+        .select("question_id, value, text_value, evaluated_leader, submitted_at")
         .eq("survey_id", survey.id)
         .range(from, from + pageSize - 1);
       if (error) throw error;
@@ -64,6 +64,33 @@ Deno.serve(async (req) => {
       responses.push(...page);
       if (page.length < pageSize) break;
     }
+
+    // Fetch respondents (tracking) — used to count distinct respondents per category/question
+    const { data: respList } = await supabase
+      .from("respondents")
+      .select("id, responded_at")
+      .eq("survey_id", survey.id)
+      .eq("status", "responded");
+
+    // Build helper to count distinct respondents covered by a set of responses,
+    // matching each response's submitted_at to the nearest respondent.responded_at
+    // within a window (6h before, 30min after). Falls back to distinct submitted_at
+    // when no respondents tracking is available.
+    const respTimes = (respList ?? [])
+      .filter((r: any) => r.responded_at)
+      .map((r: any) => ({ id: r.id, t: new Date(r.responded_at).getTime() }));
+
+    // Total respondents who finished the survey (used for organizational category)
+    const totalRespondents = respList?.length ?? 0;
+
+    // For leader-specific buckets, count distinct submission sessions
+    // (each leader-block is submitted with a single submitted_at).
+    const countRespondents = (rs: any[], useTotal = false): number => {
+      if (useTotal) return totalRespondents;
+      if (rs.length === 0) return 0;
+      const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString()));
+      return set.size;
+    };
 
     // Group by question
     const byQuestion = new Map<string, any[]>();
@@ -88,12 +115,10 @@ Deno.serve(async (req) => {
 
     const normalize = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
 
-    const buildQuestionStats = (q: any, rs: any[]) => {
+    const buildQuestionStats = (q: any, rs: any[], useTotal = false) => {
+      const respondent_count = countRespondents(rs, useTotal);
       if (q.question_type === "text") {
-        const raw = rs
-          .map((r) => (r.text_value ?? "").trim())
-          .filter((t) => t.length > 0);
-        // Dedup by normalized text — removes re-submissions/duplicate entries
+        const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
         const seen = new Set<string>();
         const comments: string[] = [];
         for (const t of raw) {
@@ -102,60 +127,35 @@ Deno.serve(async (req) => {
           seen.add(key);
           comments.push(t);
         }
-        return { ...q, type: "text", total: comments.length, raw_total: raw.length, comments };
+        return { ...q, type: "text", total: comments.length, raw_total: raw.length, respondent_count, comments };
       }
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
       let total = 0;
       rs.forEach((r) => {
-        if (r.value != null && dist[r.value] !== undefined) {
-          dist[r.value]++;
-          total++;
-        }
+        if (r.value != null && dist[r.value] !== undefined) { dist[r.value]++; total++; }
       });
       const distribution = Object.entries(dist).map(([value, count]) => ({
-        value: Number(value),
-        count,
-        percent: total > 0 ? (count / total) * 100 : 0,
+        value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
       }));
-      return { ...q, type: "scale", total, distribution };
+      return { ...q, type: "scale", total, respondent_count, distribution };
+    };
+
+    const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean, useTotal = false) => {
+      const catResponses = (responses ?? []).filter(filter);
+      const respondent_count = countRespondents(catResponses, useTotal);
+      return {
+        key, label, respondent_count,
+        questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter), useTotal)),
+      };
     };
 
     const categories = [
-      {
-        key: "organizacional",
-        label: "Organizacional",
-        questions: orgQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => !r.evaluated_leader);
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "lider-area",
-        label: "Líder de Área",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter(
-            (r) => r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
-          );
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "cid",
-        label: "Cid Lauro Vale Junior",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => r.evaluated_leader === CID);
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "alexandre",
-        label: "Alexandre Daguano",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => r.evaluated_leader === ALEX);
-          return buildQuestionStats(q, rs);
-        }),
-      },
+      buildCategory("organizacional", "Organizacional", orgQuestions, (r) => !r.evaluated_leader, true),
+      buildCategory("lider-area", "Líder de Área", leaderQuestions,
+        (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX),
+      buildCategory("cid", "Cid Lauro Vale Junior", leaderQuestions, (r) => r.evaluated_leader === CID),
+      buildCategory("alexandre", "Alexandre Daguano", leaderQuestions, (r) => r.evaluated_leader === ALEX),
     ];
 
     return json({

@@ -12,10 +12,11 @@ type Question = {
   type: "scale" | "text";
   total: number;
   raw_total?: number;
+  respondent_count?: number;
   distribution?: Distribution[];
   comments?: string[];
 };
-type Category = { key: string; label: string; questions: Question[] };
+type Category = { key: string; label: string; respondent_count?: number; questions: Question[] };
 type ReportData = {
   company: { name: string; logo_url?: string; primary_color: string; secondary_color: string };
   survey: { title: string; scale_min: number; scale_max: number };
@@ -100,7 +101,7 @@ export default function PublicReport() {
               <nav className="flex flex-col gap-1">
                 {data.categories.map((c) => {
                   const isActive = c.key === current.key;
-                  const total = c.questions.reduce((a, q) => a + q.total, 0);
+                  const count = c.respondent_count ?? 0;
                   return (
                     <button
                       key={c.key}
@@ -116,8 +117,9 @@ export default function PublicReport() {
                         className={`text-xs px-1.5 py-0.5 rounded font-mono ${
                           isActive ? "bg-white/20" : "bg-muted text-muted-foreground"
                         }`}
+                        title={`${count} respondente${count === 1 ? "" : "s"}`}
                       >
-                        {total}
+                        {count}
                       </span>
                     </button>
                   );
@@ -154,7 +156,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
     );
   }
 
-  const totalResponses = category.questions.reduce((a, q) => a + q.total, 0);
+  const respondents = category.respondent_count ?? 0;
 
   let qIdx = 0;
   return (
@@ -166,8 +168,8 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
           <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold font-display tabular-nums">{totalResponses}</p>
-          <p className="text-xs text-muted-foreground">respostas totais</p>
+          <p className="text-3xl font-bold font-display tabular-nums">{respondents}</p>
+          <p className="text-xs text-muted-foreground">{respondents === 1 ? "respondente" : "respondentes"}</p>
         </div>
       </div>
 
@@ -205,9 +207,18 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
           <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
           <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
             {isText ? <MessageSquareQuote className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
-            <span>
-              {q.total} {isText ? (q.total === 1 ? "comentário único" : "comentários únicos") : (q.total === 1 ? "resposta" : "respostas")}
-            </span>
+            {isText ? (
+              <span>
+                {q.total} {q.total === 1 ? "comentário único" : "comentários únicos"}
+                {q.respondent_count !== undefined && (
+                  <span className="text-muted-foreground/70"> · {q.respondent_count} {q.respondent_count === 1 ? "respondente" : "respondentes"}</span>
+                )}
+              </span>
+            ) : (
+              <span>
+                {q.respondent_count ?? q.total} {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
+              </span>
+            )}
             {isText && q.raw_total !== undefined && q.raw_total > q.total && (
               <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium">
                 {q.raw_total - q.total} duplicado{q.raw_total - q.total === 1 ? "" : "s"} removido{q.raw_total - q.total === 1 ? "" : "s"}
