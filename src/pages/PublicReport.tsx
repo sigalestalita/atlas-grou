@@ -149,6 +149,7 @@ export default function PublicReport() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
