@@ -1,34 +1,45 @@
 ## Objetivo
 
-Gerar um arquivo `.xlsx` com o detalhamento de cada preenchimento completo da pesquisa Tectaris, para você analisar individualmente.
+Cruzar os 23 respondentes da Tectaris marcados como "respondido" com as respostas reais no banco, e dizer **quais completaram 100%** das perguntas que o sistema deveria ter mostrado para cada um, com base no perfil (colaborador / líder de área).
 
-## Observação importante
+## Como vou determinar o "esperado"
 
-Você pediu "dos 23", mas o banco tem **30 preenchimentos completos e distintos** (já confirmamos que nenhum é duplicata — todos têm comentários textuais únicos). Vou entregar os **30 envios**, identificados como `Envio #1` a `Envio #30` pela ordem cronológica. Você decide depois se quer excluir algum.
+Pela lógica de `SurveyPage.tsx` e pela config da pesquisa (48 perguntas organizacionais + 6 perguntas por líder avaliado):
 
-Como as respostas são anônimas por design, **não é possível dizer qual envio veio de qual link** — apenas listar cada envio com seu conteúdo completo.
+| Perfil | Esperado |
+|---|---|
+| Líder de área (8 nomes: Cezar, Elizangela, Gustavo, Silvia, Stephany, Tarcisio, Eduardo, Mariana) | 48 org + 2×6 (Cid + Alexandre) = **60** |
+| Colaborador (15 demais) | 48 org + 1×6 (1 líder de área escolhido) + 2×6 (Cid + Alexandre) = **66** |
 
-## Conteúdo da planilha
+Cid e Alexandre não aparecem na lista de respondentes (líderes empresariais não respondem nada nesta pesquisa — saem direto no `no_evaluation`).
 
-**Aba 1 — Resumo**
-- Lista de 30 envios com: número, data/hora, qtd de líderes avaliados, lista de líderes, total de respostas
+## Como vou ligar respondente ↔ submissão
 
-**Aba 2 — Respostas Organizacionais (matriz)**
-- Linhas: 42 perguntas de escala + 6 de comentário (organizacional)
-- Colunas: Envio #1 … Envio #30
-- Células: nota (1-5) ou texto do comentário
+Como as respostas são anônimas (sem `respondent_id`), o vínculo é feito por:
+1. Agrupar as linhas de `survey_responses` em "envios" usando `submitted_at` (janela de 5 min + mesma combinação de líderes avaliados), igual ao `Export.tsx` já faz.
+2. Para cada respondente, encontrar o envio com `submitted_at` mais próximo do `responded_at` dele.
+3. Contar quantas perguntas distintas esse envio cobriu e comparar com o esperado.
 
-**Aba 3 — Avaliações de Líderes**
-- Linhas: cada combinação (envio, líder avaliado, pergunta)
-- Colunas: Envio, Data, Líder, Pergunta, Nota, Comentário
-
-**Aba 4 — Comentários (texto longo)**
-- Tabela só com os comentários textuais para leitura corrida, agrupados por envio
+Observação: como existem 30 envios no banco e 23 respondentes marcados, alguns respondentes podem casar com mais de um envio (reenvio); nesse caso somo as perguntas únicas respondidas pelo mesmo respondente.
 
 ## Entrega
 
-Arquivo salvo em `/mnt/documents/tectaris_preenchimentos.xlsx`, disponível pra download direto no chat.
+Um PDF curto em `/mnt/documents/tectaris_completude_por_link.pdf` com:
 
----
+1. **Resumo** — X de 23 completaram 100%, Y completaram só a parte organizacional (48), Z ficaram em algum ponto intermediário.
+2. **Tabela** com uma linha por respondente:
+   - Nome
+   - Perfil (Colaborador / Líder de área)
+   - Perguntas respondidas / esperadas (ex.: 48/66)
+   - % completo
+   - Status: ✅ 100% | ⚠️ só organizacional | ⚠️ parcial | ❌ sem envio identificado
+   - Data/hora do envio
+3. **Nota metodológica** explicando o método de pareamento por timestamp e suas limitações (envio anônimo, casamento por proximidade temporal — margem de erro pequena mas não-zero).
 
-**Confirma que posso gerar?** Se quiser outro formato (ex.: 1 aba por envio em vez de matriz, ou CSV), me diga antes.
+Se preferir Excel em vez de PDF, me diga antes de eu rodar.
+
+## Detalhes técnicos
+
+- Query base: `survey_responses` + `respondents` + `survey_questions` (filtrar `question_type != 'open_text'` para contagem de obrigatórias, mas vou também contar as abertas separadamente).
+- Script Python com `psycopg`/CSV → `reportlab` para o PDF, mesmo padrão dos outros entregáveis Tectaris.
+- Sem alterações no app/código do Atlas.
