@@ -1,34 +1,25 @@
-## Mudanças no relatório público
+## Distribuição por pergunta = exatamente 23 respondentes (Organizacional)
 
-### 1. Filtrar comentários inválidos (edge function `public-report`)
+Hoje as barras de cada pergunta organizacional somam **30** porque o banco contém todas as submissões — incluindo as resubmissões (algumas pessoas responderam mais de uma vez).
 
-Em `buildQuestionStats` (para perguntas do tipo `text`), além de deduplicar, descartar comentários cujo texto normalizado seja:
-- `sem comentários` (com ou sem acento, qualquer caixa)
-- `e`
-- `.`
+A categoria Organizacional já mostra **23 respondentes** porque é contada direto da tabela `respondents` (status `responded`). Falta aplicar a mesma lógica de pareamento para que as **distribuições por pergunta** também reflitam apenas essas 23 sessões.
 
-Lista de stopwords normalizada (`trim` + `collapse spaces` + `lowercase` + remoção de acentos): `["sem comentarios", "e", "."]`.
+### Implementação (edge function `public-report`)
 
-Resultado esperado em "Comentários sobre Credibilidade": 28 → **25 comentários únicos**, 3 descartados (1 "Sem Comentários" + 1 "e" + 1 "."), e os 2 duplicados que já eram removidos continuam contabilizados separadamente como possíveis resubmissões.
+Adicionar um passo que, para a categoria Organizacional, selecione **uma sessão de submissão por respondente**:
 
-A diferença entre `raw_total` e `total` agora representa **descartados + duplicados**. Para manter a semântica nova ("duplicados = possíveis resubmissões"), exporei dois campos:
-- `raw_total`: total bruto de comentários não-vazios
-- `total`: comentários válidos únicos exibidos
-- `duplicates_removed`: número de duplicatas exatas removidas (resubmissões)
-- (descartes por stopword ficam implícitos — não precisam aparecer na UI)
+1. Coletar todas as sessões de respostas organizacionais → conjunto de `submitted_at` distintos.
+2. Para cada `respondent.responded_at` (23 itens), encontrar a sessão mais próxima dentro de uma janela tolerante (`-6h ≤ Δ ≤ +30min`) e escolher **a mais recente** dentro dessa janela. Cada sessão só pode ser usada por um respondente.
+3. Sessões que ficarem fora do pareamento (ou seja, resubmissões antigas/duplicadas) são **descartadas**.
+4. Filtrar `survey_responses` organizacionais para manter apenas as sessões pareadas e usar esse subconjunto em `buildQuestionStats` (distribuição da escala + comentários únicos).
 
-### 2. Renomear a tag na UI (`src/pages/PublicReport.tsx`)
-
-Trocar:
-> `2 duplicados removidos`
-
-por:
-> `2 comentários podem ser de repreenchimentos/pesquisas refeitas`
-
-Só aparece quando `duplicates_removed > 0`.
+Resultado esperado para "A empresa é bem administrada":
+- antes: 17 + 11 + 1 + 1 + 0 = 30
+- depois: soma = 23 (mantendo as respostas mais recentes de cada um dos 23 respondentes)
 
 ### Escopo
 
-- Aplica a todas as categorias (Organizacional, Cid, Alexandre, Líder de Área) — o filtro de stopwords é universal.
-- Sem mudanças no banco; tudo é feito em leitura na edge function.
-- Sem mudanças no formulário ou nas demais telas.
+- **Apenas Organizacional**. Categorias de líder (Cid, Alexandre, Líder de Área) continuam contando sessões distintas com asterisco — não dá para parear respondentes lá com confiança porque cada líder tem seu próprio número e estamos fora da tabela `respondents`.
+- **Sem mudanças no banco**: dedupe é feito em leitura.
+- **Sem mudanças no formulário** nem no resto do app.
+- Os totais por pergunta passam a refletir 23; o badge "N comentários podem ser de repreenchimentos" continua medindo a duplicação textual original (não muda).
