@@ -265,7 +265,6 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
         </div>
-        </div>
       </div>
 
       {/* Card body */}
