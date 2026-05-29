@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquareQuote, BarChart3 } from "lucide-react";
 import { IntroSplash } from "@/components/IntroSplash";
+import grouLogo from "@/assets/grou-logo.png";
+import introBg from "@/assets/intro-bg.png";
 
 type Distribution = { value: number; count: number; percent: number };
 type Question = {
@@ -82,73 +84,110 @@ export default function PublicReport() {
         eyebrow="Pesquisa de Clima Organizacional"
         title={data.survey.title}
       />
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <header
-        className="border-b shadow-sm"
-        style={{ background: `linear-gradient(135deg, ${data.company.primary_color}, ${data.company.secondary_color})` }}
-      >
-        <div className="container mx-auto px-6 py-10 flex items-center gap-5">
-          {data.company.logo_url && (
-            <img
-              src={data.company.logo_url}
-              alt={data.company.name}
-              className="h-16 bg-white/95 rounded-lg p-2 shadow-md"
-            />
-          )}
-          <div className="text-white">
-            <p className="text-white/70 text-xs uppercase tracking-widest font-semibold">Relatório de Entrega</p>
-            <h1 className="text-2xl md:text-3xl font-bold font-display mt-1">{data.survey.title}</h1>
-          </div>
+      <div className="relative min-h-screen overflow-hidden bg-[#020617] text-foreground">
+        {/* Cosmic background — same vibe as IntroSplash */}
+        <div aria-hidden className="pointer-events-none fixed inset-0 -z-0">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${introBg})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              opacity: 0.55,
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, rgba(2,6,23,0.35) 0%, rgba(2,6,23,0.75) 55%, rgba(2,6,23,0.95) 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(2,6,23,0.85) 0%, rgba(2,6,23,0.35) 18%, rgba(2,6,23,0.35) 82%, rgba(2,6,23,0.9) 100%)",
+            }}
+          />
         </div>
-      </header>
 
-      <div className="container mx-auto px-4 md:px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
-          {/* Sticky sidebar nav */}
-          <aside className="lg:sticky lg:top-6 lg:self-start">
-            <div className="bg-card border rounded-xl p-2 shadow-sm">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
-                Categorias
-              </p>
-              <nav className="flex flex-col gap-1">
-                {data.categories.map((c) => {
-                  const isActive = c.key === current.key;
-                  const count = c.respondent_count ?? 0;
-                  const approx = c.respondent_count_approx;
-                  return (
-                    <button
-                      key={c.key}
-                      onClick={() => setActiveCategory(c.key)}
-                      className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors ${
-                        isActive
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <span className="truncate">{c.label}</span>
-                      <span
-                        className={`text-xs px-1.5 py-0.5 rounded font-mono ${
-                          isActive ? "bg-white/20" : "bg-muted text-muted-foreground"
-                        }`}
-                        title={approx ? `${count} sessões de submissão (inclui possíveis resubmissões)` : `${count} respondente${count === 1 ? "" : "s"}`}
-                      >
-                        {count}{approx ? "*" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </nav>
+        {/* Top bar */}
+        <header className="relative z-20 border-b border-white/10 bg-[#020617]/70 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-10">
+            <div className="flex items-center gap-3 md:gap-5">
+              <img src={grouLogo} alt="Grou" className="h-6 w-auto brightness-0 invert md:h-7" />
+              <span className="h-5 w-px bg-white/25" />
+              {data.company.logo_url && (
+                <img
+                  src={data.company.logo_url}
+                  alt={data.company.name}
+                  className="h-8 w-auto object-contain md:h-10"
+                />
+              )}
             </div>
-          </aside>
+            <div className="text-left md:text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+                Pesquisa de Clima · Relatório
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-white md:text-base">
+                {data.survey.title}
+              </p>
+            </div>
+          </div>
+        </header>
 
-          {/* Content */}
-          <main className="min-w-0">
+        {/* Stage */}
+        <main className="relative z-10 mx-auto max-w-6xl px-3 py-6 md:px-10 md:py-10">
+          {/* Category pills */}
+          <nav className="mb-6 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-xl">
+            <span className="px-2 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-white/55">
+              Categorias
+            </span>
+            {data.categories.map((c) => {
+              const isActive = c.key === current.key;
+              const count = c.respondent_count ?? 0;
+              const approx = c.respondent_count_approx;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setActiveCategory(c.key)}
+                  className={`group flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold transition-all ${
+                    isActive
+                      ? "border-[#9ec5ff]/60 bg-[#9ec5ff]/15 text-white shadow-[0_0_0_3px_rgba(158,197,255,0.12)]"
+                      : "border-white/10 bg-white/5 text-white/65 hover:border-white/25 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <span className="truncate">{c.label}</span>
+                  <span
+                    className={`grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 font-mono text-[10px] tabular-nums ${
+                      isActive ? "bg-[#9ec5ff] text-[#020617]" : "bg-white/10 text-white/60"
+                    }`}
+                    title={approx ? `${count} sessões (inclui possíveis resubmissões)` : `${count} respondente${count === 1 ? "" : "s"}`}
+                  >
+                    {count}{approx ? "*" : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Content panel — same look as slide stage */}
+          <div
+            key={current.key}
+            className="rounded-2xl border border-white/10 bg-background p-5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] ring-1 ring-white/5 animate-[reportFadeIn_500ms_ease-out] md:p-10"
+          >
             <CategoryView category={current} scaleLabels={data.scale_labels} />
-          </main>
-        </div>
+          </div>
+        </main>
+
+        <style>{`
+          @keyframes reportFadeIn {
+            0% { opacity: 0; transform: translateY(14px) scale(0.99); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}</style>
       </div>
-    </div>
     </>
   );
 }
