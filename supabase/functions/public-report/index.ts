@@ -9,13 +9,12 @@ const corsHeaders = {
 const CID = "Cid Lauro Vale Junior";
 const ALEX = "Alexandre Daguano";
 
-// Gap máximo entre sessões consecutivas para considerá-las parte da mesma "tentativa"
-// (mesma pessoa preenchendo a pesquisa em sequência). Tentativas separadas por um gap
-// maior são tratadas como resubmissões — só a tentativa que CONTÉM o responded_at do
-// respondent conta; as outras são descartadas como duplicatas.
-const CLUSTER_GAP_MS = 30 * 60 * 1000; // 30 min
-// Tolerância para casar uma tentativa ao responded_at do respondent.
-const ATTEMPT_MATCH_TOLERANCE_MS = 5 * 60 * 1000; // 5 min
+// Sessões consecutivas no MESMO bucket separadas por menos que este intervalo são
+// tratadas como resubmissão da mesma pessoa (a 2ª é descartada).
+const DUPLICATE_GAP_MS = 12 * 60 * 1000; // 12 min
+// Janela para parear uma sessão ao responded_at do respondent.
+const WINDOW_BEFORE = 6 * 60 * 60 * 1000; // 6h antes
+const WINDOW_AFTER = 30 * 60 * 1000;       // 30min depois
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
