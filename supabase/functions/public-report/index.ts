@@ -80,26 +80,16 @@ Deno.serve(async (req) => {
       .filter((r: any) => r.responded_at)
       .map((r: any) => ({ id: r.id, t: new Date(r.responded_at).getTime() }));
 
-    const countRespondents = (rs: any[]): number => {
+    // Total respondents who finished the survey (used for organizational category)
+    const totalRespondents = respList?.length ?? 0;
+
+    // For leader-specific buckets, count distinct submission sessions
+    // (each leader-block is submitted with a single submitted_at).
+    const countRespondents = (rs: any[], useTotal = false): number => {
+      if (useTotal) return totalRespondents;
       if (rs.length === 0) return 0;
-      if (respTimes.length === 0) {
-        const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString().slice(0, 16)));
-        return set.size;
-      }
-      // Attribute each response to the temporally-nearest respondent (no strict window),
-      // then count distinct respondents touched.
-      const matched = new Set<string>();
-      for (const r of rs) {
-        const st = new Date(r.submitted_at).getTime();
-        let best: string | null = null;
-        let bestDiff = Infinity;
-        for (const rp of respTimes) {
-          const diff = Math.abs(rp.t - st);
-          if (diff < bestDiff) { bestDiff = diff; best = rp.id; }
-        }
-        if (best) matched.add(best);
-      }
-      return matched.size;
+      const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString()));
+      return set.size;
     };
 
     // Group by question
