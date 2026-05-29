@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, LayoutDashboard, FileText, Users, Link2, BarChart3, UserCheck, Activity, MessageSquare, Download } from 'lucide-react';
+import { Building2, LayoutDashboard, FileText, Users, Link2, BarChart3, UserCheck, Activity, MessageSquare, Download, ExternalLink } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Company {
@@ -68,6 +68,15 @@ export default function CompanyView() {
             {tab.label}
           </NavLink>
         ))}
+        <a
+          href={`/relatorio/${company.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Relatório Público
+        </a>
       </div>
 
       <Outlet context={{ company }} />
