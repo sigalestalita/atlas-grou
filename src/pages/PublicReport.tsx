@@ -13,10 +13,11 @@ type Question = {
   total: number;
   raw_total?: number;
   respondent_count?: number;
+  respondent_count_approx?: boolean;
   distribution?: Distribution[];
   comments?: string[];
 };
-type Category = { key: string; label: string; respondent_count?: number; questions: Question[] };
+type Category = { key: string; label: string; respondent_count?: number; respondent_count_approx?: boolean; questions: Question[] };
 type ReportData = {
   company: { name: string; logo_url?: string; primary_color: string; secondary_color: string };
   survey: { title: string; scale_min: number; scale_max: number };
