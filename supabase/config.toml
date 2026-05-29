@@ -1,1 +1,4 @@
 project_id = "nbbysuceahfelvovxexf"
+
+[functions.public-report]
+verify_jwt = false
