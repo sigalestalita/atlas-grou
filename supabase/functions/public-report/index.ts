@@ -82,33 +82,39 @@ Deno.serve(async (req) => {
 
     const totalRespondents = respList?.length ?? 0;
 
-    // Helper: para um conjunto de respostas (filtradas por bucket), mapear cada SESSÃO
-    // (submitted_at distinto) ao respondent mais próximo dentro da janela. Múltiplas
-    // sessões podem mapear ao mesmo respondent (caso de resubmissão), e o numerador
-    // é o número de respondents distintos cobertos. Sessões órfãs (sem respondent na
-    // janela) ainda são mantidas como pareadas para preservar as distribuições.
+    // Helper: para cada respondent, escolher a sessão do bucket mais próxima do
+    // responded_at dentro de uma janela estreita. Cada respondent reivindica no
+    // máximo 1 sessão. Sessões não reivindicadas são tratadas como duplicatas
+    // (resubmissões antigas) e descartadas do bucket.
     const pairSessions = (rs: any[]): { paired: Set<number>; respondentCount: number } => {
       const sessions = Array.from(
         new Set(rs.map((r) => new Date(r.submitted_at).getTime())),
       ).sort((a, b) => a - b);
+      const used = new Set<number>();
       const paired = new Set<number>();
       const respondentsCovered = new Set<string>();
-      const sortedResp = [...respTimes].sort((a, b) => a.t - b.t);
-      for (const s of sessions) {
-        // Encontrar o respondent cujo responded_at está mais próximo de s, dentro da janela.
-        let best: { id: string; diff: number } | null = null;
-        for (const r of sortedResp) {
-          const diff = s - r.t;
-          if (diff > WINDOW_AFTER) continue; // s > r.t + after — esse respondent não cabe
-          if (-diff > WINDOW_BEFORE) continue; // s < r.t - before
-          const abs = Math.abs(diff);
-          if (!best || abs < best.diff) best = { id: r.id, diff: abs };
+      // Iterar respondents em ordem decrescente — os mais recentes reivindicam primeiro
+      const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
+      for (const r of sortedResp) {
+        const lo = r.t - WINDOW_BEFORE;
+        const hi = r.t + WINDOW_AFTER;
+        let best: { s: number; abs: number } | null = null;
+        for (const s of sessions) {
+          if (s < lo || s > hi) continue;
+          if (used.has(s)) continue;
+          const abs = Math.abs(s - r.t);
+          if (!best || abs < best.abs) best = { s, abs };
         }
-        paired.add(s);
-        if (best) respondentsCovered.add(best.id);
+        if (best) {
+          used.add(best.s);
+          paired.add(best.s);
+          respondentsCovered.add(r.id);
+        }
       }
       return { paired, respondentCount: respondentsCovered.size };
     };
+
+
 
 
 
