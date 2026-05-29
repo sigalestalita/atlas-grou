@@ -264,19 +264,7 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
-          <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
-            {isText ? <MessageSquareQuote className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
-            {isText ? (
-              <span>
-                {q.respondent_count ?? q.total} {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
-              </span>
-            ) : (
-              <span>
-                {q.respondent_count ?? q.total}{" "}
-                {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
-              </span>
-            )}
-          </div>
+        </div>
         </div>
       </div>
 
