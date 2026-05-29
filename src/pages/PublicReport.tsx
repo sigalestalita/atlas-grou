@@ -13,10 +13,11 @@ type Question = {
   total: number;
   raw_total?: number;
   respondent_count?: number;
+  respondent_count_approx?: boolean;
   distribution?: Distribution[];
   comments?: string[];
 };
-type Category = { key: string; label: string; respondent_count?: number; questions: Question[] };
+type Category = { key: string; label: string; respondent_count?: number; respondent_count_approx?: boolean; questions: Question[] };
 type ReportData = {
   company: { name: string; logo_url?: string; primary_color: string; secondary_color: string };
   survey: { title: string; scale_min: number; scale_max: number };
@@ -102,6 +103,7 @@ export default function PublicReport() {
                 {data.categories.map((c) => {
                   const isActive = c.key === current.key;
                   const count = c.respondent_count ?? 0;
+                  const approx = c.respondent_count_approx;
                   return (
                     <button
                       key={c.key}
@@ -117,9 +119,9 @@ export default function PublicReport() {
                         className={`text-xs px-1.5 py-0.5 rounded font-mono ${
                           isActive ? "bg-white/20" : "bg-muted text-muted-foreground"
                         }`}
-                        title={`${count} respondente${count === 1 ? "" : "s"}`}
+                        title={approx ? `${count} sessões de submissão (inclui possíveis resubmissões)` : `${count} respondente${count === 1 ? "" : "s"}`}
                       >
-                        {count}
+                        {count}{approx ? "*" : ""}
                       </span>
                     </button>
                   );
@@ -157,6 +159,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   }
 
   const respondents = category.respondent_count ?? 0;
+  const approx = category.respondent_count_approx;
 
   let qIdx = 0;
   return (
@@ -168,8 +171,16 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
           <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold font-display tabular-nums">{respondents}</p>
-          <p className="text-xs text-muted-foreground">{respondents === 1 ? "respondente" : "respondentes"}</p>
+          <p
+            className="text-3xl font-bold font-display tabular-nums"
+            title={approx ? "Inclui possíveis resubmissões (sessões de submissão distintas)" : undefined}
+          >
+            {respondents}{approx && <span className="text-muted-foreground">*</span>}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {respondents === 1 ? "respondente" : "respondentes"}
+            {approx && <span title="Inclui possíveis resubmissões"> *</span>}
+          </p>
         </div>
       </div>
 
@@ -215,8 +226,10 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 )}
               </span>
             ) : (
-              <span>
-                {q.respondent_count ?? q.total} {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
+              <span title={q.respondent_count_approx ? "Inclui possíveis resubmissões" : undefined}>
+                {q.respondent_count ?? q.total}
+                {q.respondent_count_approx && <span className="text-muted-foreground/70">*</span>}
+                {" "}{(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
               </span>
             )}
             {isText && q.raw_total !== undefined && q.raw_total > q.total && (
