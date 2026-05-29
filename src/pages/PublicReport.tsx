@@ -131,7 +131,7 @@ export default function PublicReport() {
                 Pesquisa de Clima · Relatório
               </p>
               <p className="mt-0.5 text-sm font-semibold text-white md:text-base">
-                {data.survey.title}
+                {data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
               </p>
             </div>
           </div>
