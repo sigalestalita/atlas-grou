@@ -25,6 +25,7 @@ import Tracking from "@/pages/admin/Tracking";
 import ExportPage from "@/pages/admin/Export";
 import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
+import PublicReport from "@/pages/PublicReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,9 @@ const App = () => (
             {/* Anonymous survey routes (no auth needed) */}
             <Route path="/survey/:slug/:token" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
             <Route path="/survey/:slug" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
+
+            {/* Public shareable report */}
+            <Route path="/relatorio/:slug" element={<PublicReport />} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
