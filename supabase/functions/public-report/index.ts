@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
     const normalize = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
 
     const buildQuestionStats = (q: any, rs: any[]) => {
+      const respondent_count = countRespondents(rs);
       if (q.question_type === "text") {
         const raw = rs
           .map((r) => (r.text_value ?? "").trim())
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
           seen.add(key);
           comments.push(t);
         }
-        return { ...q, type: "text", total: comments.length, raw_total: raw.length, comments };
+        return { ...q, type: "text", total: comments.length, raw_total: raw.length, respondent_count, comments };
       }
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
@@ -159,44 +160,26 @@ Deno.serve(async (req) => {
         count,
         percent: total > 0 ? (count / total) * 100 : 0,
       }));
-      return { ...q, type: "scale", total, distribution };
+      return { ...q, type: "scale", total, respondent_count, distribution };
+    };
+
+    const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean) => {
+      const catResponses = (responses ?? []).filter(filter);
+      const respondent_count = countRespondents(catResponses);
+      return {
+        key,
+        label,
+        respondent_count,
+        questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter))),
+      };
     };
 
     const categories = [
-      {
-        key: "organizacional",
-        label: "Organizacional",
-        questions: orgQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => !r.evaluated_leader);
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "lider-area",
-        label: "Líder de Área",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter(
-            (r) => r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
-          );
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "cid",
-        label: "Cid Lauro Vale Junior",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => r.evaluated_leader === CID);
-          return buildQuestionStats(q, rs);
-        }),
-      },
-      {
-        key: "alexandre",
-        label: "Alexandre Daguano",
-        questions: leaderQuestions.map((q) => {
-          const rs = (byQuestion.get(q.id) ?? []).filter((r) => r.evaluated_leader === ALEX);
-          return buildQuestionStats(q, rs);
-        }),
-      },
+      buildCategory("organizacional", "Organizacional", orgQuestions, (r) => !r.evaluated_leader),
+      buildCategory("lider-area", "Líder de Área", leaderQuestions,
+        (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX),
+      buildCategory("cid", "Cid Lauro Vale Junior", leaderQuestions, (r) => r.evaluated_leader === CID),
+      buildCategory("alexandre", "Alexandre Daguano", leaderQuestions, (r) => r.evaluated_leader === ALEX),
     ];
 
     return json({
