@@ -12,6 +12,7 @@ type Question = {
   type: "scale" | "text";
   total: number;
   raw_total?: number;
+  duplicates_removed?: number;
   respondent_count?: number;
   respondent_count_approx?: boolean;
   distribution?: Distribution[];
