@@ -223,8 +223,6 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
           <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p
-            className="text-3xl font-bold font-display tabular-nums"
           <p className="text-3xl font-bold font-display tabular-nums">
             {respondents}
           </p>
