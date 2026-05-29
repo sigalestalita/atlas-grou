@@ -193,7 +193,7 @@ Deno.serve(async (req) => {
         "lider-area": { count: 13, total: 15 },
       },
     };
-    const overrides = COUNT_OVERRIDES[surveyId] ?? {};
+    const overrides = COUNT_OVERRIDES[survey.id] ?? {};
 
     const buildBucket = (spec: BucketSpec) => {
       const bucketResponses = (responses ?? []).filter(spec.baseFilter);
