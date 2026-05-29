@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
 
     const buildQuestionStats = (q: any, rs: any[], useTotal = false) => {
       const respondent_count = countRespondents(rs, useTotal);
+      const respondent_count_approx = !useTotal;
       if (q.question_type === "text") {
         const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
         const seen = new Set<string>();
@@ -127,7 +128,7 @@ Deno.serve(async (req) => {
           seen.add(key);
           comments.push(t);
         }
-        return { ...q, type: "text", total: comments.length, raw_total: raw.length, respondent_count, comments };
+        return { ...q, type: "text", total: comments.length, raw_total: raw.length, respondent_count, respondent_count_approx, comments };
       }
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
@@ -138,7 +139,7 @@ Deno.serve(async (req) => {
       const distribution = Object.entries(dist).map(([value, count]) => ({
         value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
       }));
-      return { ...q, type: "scale", total, respondent_count, distribution };
+      return { ...q, type: "scale", total, respondent_count, respondent_count_approx, distribution };
     };
 
     const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean, useTotal = false) => {
@@ -146,6 +147,7 @@ Deno.serve(async (req) => {
       const respondent_count = countRespondents(catResponses, useTotal);
       return {
         key, label, respondent_count,
+        respondent_count_approx: !useTotal,
         questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter), useTotal)),
       };
     };
