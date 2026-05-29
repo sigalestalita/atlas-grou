@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     for (let from = 0; ; from += pageSize) {
       const { data: page, error } = await supabase
         .from("survey_responses")
-        .select("question_id, value, text_value, evaluated_leader")
+        .select("question_id, value, text_value, evaluated_leader, submitted_at")
         .eq("survey_id", survey.id)
         .range(from, from + pageSize - 1);
       if (error) throw error;
@@ -64,6 +64,47 @@ Deno.serve(async (req) => {
       responses.push(...page);
       if (page.length < pageSize) break;
     }
+
+    // Fetch respondents (tracking) — used to count distinct respondents per category/question
+    const { data: respList } = await supabase
+      .from("respondents")
+      .select("id, responded_at")
+      .eq("survey_id", survey.id)
+      .eq("status", "responded");
+
+    // Build helper to count distinct respondents covered by a set of responses,
+    // matching each response's submitted_at to the nearest respondent.responded_at
+    // within a window (6h before, 30min after). Falls back to distinct submitted_at
+    // when no respondents tracking is available.
+    const respTimes = (respList ?? [])
+      .filter((r: any) => r.responded_at)
+      .map((r: any) => ({ id: r.id, t: new Date(r.responded_at).getTime() }));
+
+    const WIN_BEFORE = 6 * 3600 * 1000;
+    const WIN_AFTER = 30 * 60 * 1000;
+
+    const countRespondents = (rs: any[]): number => {
+      if (rs.length === 0) return 0;
+      if (respTimes.length === 0) {
+        // fallback: distinct submitted_at to the minute
+        const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString().slice(0, 16)));
+        return set.size;
+      }
+      const matched = new Set<string>();
+      for (const r of rs) {
+        const st = new Date(r.submitted_at).getTime();
+        let best: string | null = null;
+        let bestDiff = Infinity;
+        for (const rp of respTimes) {
+          if (st >= rp.t - WIN_BEFORE && st <= rp.t + WIN_AFTER) {
+            const diff = Math.abs(rp.t - st);
+            if (diff < bestDiff) { bestDiff = diff; best = rp.id; }
+          }
+        }
+        if (best) matched.add(best);
+      }
+      return matched.size;
+    };
 
     // Group by question
     const byQuestion = new Map<string, any[]>();
