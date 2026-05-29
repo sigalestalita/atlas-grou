@@ -207,9 +207,18 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
           <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
           <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
             {isText ? <MessageSquareQuote className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
-            <span>
-              {q.total} {isText ? (q.total === 1 ? "comentário único" : "comentários únicos") : (q.total === 1 ? "resposta" : "respostas")}
-            </span>
+            {isText ? (
+              <span>
+                {q.total} {q.total === 1 ? "comentário único" : "comentários únicos"}
+                {q.respondent_count !== undefined && (
+                  <span className="text-muted-foreground/70"> · {q.respondent_count} {q.respondent_count === 1 ? "respondente" : "respondentes"}</span>
+                )}
+              </span>
+            ) : (
+              <span>
+                {q.respondent_count ?? q.total} {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
+              </span>
+            )}
             {isText && q.raw_total !== undefined && q.raw_total > q.total && (
               <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium">
                 {q.raw_total - q.total} duplicado{q.raw_total - q.total === 1 ? "" : "s"} removido{q.raw_total - q.total === 1 ? "" : "s"}
