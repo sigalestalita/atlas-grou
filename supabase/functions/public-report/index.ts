@@ -9,9 +9,11 @@ const corsHeaders = {
 const CID = "Cid Lauro Vale Junior";
 const ALEX = "Alexandre Daguano";
 
-// Janela usada para parear sessões de submissão a respondents
-const WINDOW_BEFORE = 6 * 60 * 60 * 1000; // 6h antes
-const WINDOW_AFTER = 30 * 60 * 1000;       // 30min depois
+// Janela de pareamento sessão↔respondent. Cada respondent finaliza ao enviar o último
+// bloco — então a sessão "real" daquele bucket fica a poucos segundos do responded_at.
+// Janela apertada evita que sessões duplicadas (resubmissões antigas) sejam contadas.
+const WINDOW_BEFORE = 8 * 60 * 1000;  // 8 min antes
+const WINDOW_AFTER = 8 * 60 * 1000;   // 8 min depois
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
