@@ -123,17 +123,27 @@ Deno.serve(async (req) => {
       const respondent_count_approx = !useTotal;
       if (q.question_type === "text") {
         const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
-        const valid = raw.filter((t) => !STOPWORDS.has(normalize(t)));
+        // Count duplicates across ALL non-empty submissions (before stopword filtering)
+        // so the "possíveis resubmissões" tag reflects the original repeat count.
+        const rawSeen = new Set<string>();
+        let duplicates_removed = 0;
+        for (const t of raw) {
+          const key = normalize(t);
+          if (rawSeen.has(key)) { duplicates_removed++; continue; }
+          rawSeen.add(key);
+        }
+        // Build the displayed list: unique + non-stopword
         const seen = new Set<string>();
         const comments: string[] = [];
-        let duplicates_removed = 0;
-        for (const t of valid) {
+        for (const t of raw) {
           const key = normalize(t);
-          if (seen.has(key)) { duplicates_removed++; continue; }
+          if (seen.has(key)) continue;
           seen.add(key);
+          if (STOPWORDS.has(key)) continue;
           comments.push(t);
         }
         return { ...q, type: "text", total: comments.length, raw_total: raw.length, duplicates_removed, respondent_count, respondent_count_approx, comments };
+
       }
 
       const dist: Record<number, number> = {};
