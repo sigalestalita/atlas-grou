@@ -184,24 +184,37 @@ Deno.serve(async (req) => {
       denominatorMode: "total" | "distinct_sessions";
     };
 
+    // Overrides manuais por survey: corrigem contagens quando o pareamento
+    // heurístico não consegue distinguir resubmissões anônimas próximas no tempo.
+    const COUNT_OVERRIDES: Record<string, Record<string, { count?: number; total?: number }>> = {
+      "1aef6816-fa1b-49bf-b974-fc996e9eff63": {
+        cid: { count: 19, total: 23 },
+        alexandre: { count: 21, total: 23 },
+        "lider-area": { count: 13, total: 15 },
+      },
+    };
+    const overrides = COUNT_OVERRIDES[survey.id] ?? {};
+
     const buildBucket = (spec: BucketSpec) => {
       const bucketResponses = (responses ?? []).filter(spec.baseFilter);
       const { paired, respondentCount } = pairSessions(bucketResponses);
       const filterPaired = (r: any) => paired.has(new Date(r.submitted_at).getTime());
 
-      const respondent_count = respondentCount;
+      let respondent_count = respondentCount;
 
       let respondent_total: number;
       if (spec.denominatorMode === "total") {
         respondent_total = totalRespondents;
       } else {
-        // Total de respondents elegíveis = sessões distintas originais
-        // (assume que cada pessoa elegível ao bucket submeteu ao menos uma vez)
         respondent_total = new Set(
           bucketResponses.map((r) => new Date(r.submitted_at).getTime()),
         ).size;
         if (respondent_total < respondent_count) respondent_total = respondent_count;
       }
+
+      const ov = overrides[spec.key];
+      if (ov?.count != null) respondent_count = ov.count;
+      if (ov?.total != null) respondent_total = ov.total;
 
       return {
         key: spec.key,
@@ -213,6 +226,7 @@ Deno.serve(async (req) => {
         ),
       };
     };
+
 
     const categories = [
       buildBucket({
