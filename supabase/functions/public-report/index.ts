@@ -80,26 +80,22 @@ Deno.serve(async (req) => {
       .filter((r: any) => r.responded_at)
       .map((r: any) => ({ id: r.id, t: new Date(r.responded_at).getTime() }));
 
-    const WIN_BEFORE = 6 * 3600 * 1000;
-    const WIN_AFTER = 30 * 60 * 1000;
-
     const countRespondents = (rs: any[]): number => {
       if (rs.length === 0) return 0;
       if (respTimes.length === 0) {
-        // fallback: distinct submitted_at to the minute
         const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString().slice(0, 16)));
         return set.size;
       }
+      // Attribute each response to the temporally-nearest respondent (no strict window),
+      // then count distinct respondents touched.
       const matched = new Set<string>();
       for (const r of rs) {
         const st = new Date(r.submitted_at).getTime();
         let best: string | null = null;
         let bestDiff = Infinity;
         for (const rp of respTimes) {
-          if (st >= rp.t - WIN_BEFORE && st <= rp.t + WIN_AFTER) {
-            const diff = Math.abs(rp.t - st);
-            if (diff < bestDiff) { bestDiff = diff; best = rp.id; }
-          }
+          const diff = Math.abs(rp.t - st);
+          if (diff < bestDiff) { bestDiff = diff; best = rp.id; }
         }
         if (best) matched.add(best);
       }
