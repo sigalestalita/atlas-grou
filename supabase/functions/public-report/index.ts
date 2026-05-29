@@ -50,10 +50,20 @@ Deno.serve(async (req) => {
       .in("section_id", (sections ?? []).map((s: any) => s.id))
       .order("sort_order");
 
-    const { data: responses } = await supabase
-      .from("survey_responses")
-      .select("question_id, value, text_value, evaluated_leader")
-      .eq("survey_id", survey.id);
+    // Paginated fetch — Supabase caps single queries at 1000 rows by default
+    const responses: any[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data: page, error } = await supabase
+        .from("survey_responses")
+        .select("question_id, value, text_value, evaluated_leader")
+        .eq("survey_id", survey.id)
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!page || page.length === 0) break;
+      responses.push(...page);
+      if (page.length < pageSize) break;
+    }
 
     // Group by question
     const byQuestion = new Map<string, any[]>();
