@@ -103,6 +103,7 @@ export default function PublicReport() {
                 {data.categories.map((c) => {
                   const isActive = c.key === current.key;
                   const count = c.respondent_count ?? 0;
+                  const approx = c.respondent_count_approx;
                   return (
                     <button
                       key={c.key}
@@ -118,9 +119,9 @@ export default function PublicReport() {
                         className={`text-xs px-1.5 py-0.5 rounded font-mono ${
                           isActive ? "bg-white/20" : "bg-muted text-muted-foreground"
                         }`}
-                        title={`${count} respondente${count === 1 ? "" : "s"}`}
+                        title={approx ? `${count} sessões de submissão (inclui possíveis resubmissões)` : `${count} respondente${count === 1 ? "" : "s"}`}
                       >
-                        {count}
+                        {count}{approx ? "*" : ""}
                       </span>
                     </button>
                   );
