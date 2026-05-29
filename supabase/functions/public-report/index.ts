@@ -195,10 +195,28 @@ Deno.serve(async (req) => {
     };
     const overrides = COUNT_OVERRIDES[survey.id] ?? {};
 
+    // Quando há override de contagem, removemos as sessões mais próximas no tempo
+    // (prováveis resubmissões da mesma pessoa) até atingir o número-alvo.
+    const dedupSessionsToTarget = (sessions: number[], target: number): Set<number> => {
+      const kept = [...sessions].sort((a, b) => a - b);
+      while (kept.length > target) {
+        let minGap = Infinity;
+        let dropIdx = -1;
+        for (let i = 1; i < kept.length; i++) {
+          const gap = kept[i] - kept[i - 1];
+          if (gap < minGap) { minGap = gap; dropIdx = i; }
+        }
+        if (dropIdx < 0) break;
+        kept.splice(dropIdx, 1);
+      }
+      return new Set(kept);
+    };
+
     const buildBucket = (spec: BucketSpec) => {
       const bucketResponses = (responses ?? []).filter(spec.baseFilter);
       const { paired, respondentCount } = pairSessions(bucketResponses);
-      const filterPaired = (r: any) => paired.has(new Date(r.submitted_at).getTime());
+      let activeSessions: Set<number> = paired;
+      const filterActive = (r: any) => activeSessions.has(new Date(r.submitted_at).getTime());
 
       let respondent_count = respondentCount;
 
@@ -213,7 +231,15 @@ Deno.serve(async (req) => {
       }
 
       const ov = overrides[spec.key];
-      if (ov?.count != null) respondent_count = ov.count;
+      if (ov?.count != null) {
+        respondent_count = ov.count;
+        const allSessions = Array.from(
+          new Set(bucketResponses.map((r) => new Date(r.submitted_at).getTime())),
+        );
+        if (allSessions.length > ov.count) {
+          activeSessions = dedupSessionsToTarget(allSessions, ov.count);
+        }
+      }
       if (ov?.total != null) respondent_total = ov.total;
 
       return {
@@ -222,10 +248,11 @@ Deno.serve(async (req) => {
         respondent_count,
         respondent_total,
         questions: spec.questions.map((q) =>
-          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterPaired(r))),
+          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r))),
         ),
       };
     };
+
 
 
     const categories = [
