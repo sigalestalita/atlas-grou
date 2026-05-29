@@ -9,6 +9,10 @@ const corsHeaders = {
 const CID = "Cid Lauro Vale Junior";
 const ALEX = "Alexandre Daguano";
 
+// Janela usada para parear sessões de submissão a respondents
+const WINDOW_BEFORE = 6 * 60 * 60 * 1000; // 6h antes
+const WINDOW_AFTER = 30 * 60 * 1000;       // 30min depois
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -50,7 +54,6 @@ Deno.serve(async (req) => {
       .in("section_id", (sections ?? []).map((s: any) => s.id))
       .order("sort_order");
 
-    // Paginated fetch — Supabase caps single queries at 1000 rows by default
     const responses: any[] = [];
     const pageSize = 1000;
     for (let from = 0; ; from += pageSize) {
@@ -65,31 +68,46 @@ Deno.serve(async (req) => {
       if (page.length < pageSize) break;
     }
 
-    // Fetch respondents (tracking) — used to count distinct respondents per category/question
     const { data: respList } = await supabase
       .from("respondents")
       .select("id, responded_at")
       .eq("survey_id", survey.id)
       .eq("status", "responded");
 
-    // Build helper to count distinct respondents covered by a set of responses,
-    // matching each response's submitted_at to the nearest respondent.responded_at
-    // within a window (6h before, 30min after). Falls back to distinct submitted_at
-    // when no respondents tracking is available.
     const respTimes = (respList ?? [])
       .filter((r: any) => r.responded_at)
       .map((r: any) => ({ id: r.id, t: new Date(r.responded_at).getTime() }));
 
-    // Total respondents who finished the survey (used for organizational category)
     const totalRespondents = respList?.length ?? 0;
 
-    // For leader-specific buckets, count distinct submission sessions
-    // (each leader-block is submitted with a single submitted_at).
-    const countRespondents = (rs: any[], useTotal = false): number => {
-      if (useTotal) return totalRespondents;
-      if (rs.length === 0) return 0;
-      const set = new Set(rs.map((r) => new Date(r.submitted_at).toISOString()));
-      return set.size;
+    // Helper: para um conjunto de respostas (filtradas por bucket), retornar o conjunto
+    // de timestamps de sessões "pareadas" — uma sessão por respondente, escolhida
+    // como a sessão mais recente do bucket dentro da janela do responded_at.
+    const pairSessions = (rs: any[]): Set<number> => {
+      const sessions = Array.from(
+        new Set(rs.map((r) => new Date(r.submitted_at).getTime())),
+      ).sort((a, b) => a - b);
+      const used = new Set<number>();
+      const paired = new Set<number>();
+      const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
+      for (const r of sortedResp) {
+        const lo = r.t - WINDOW_BEFORE;
+        const hi = r.t + WINDOW_AFTER;
+        let chosen: number | null = null;
+        for (let i = sessions.length - 1; i >= 0; i--) {
+          const s = sessions[i];
+          if (s > hi) continue;
+          if (s < lo) break;
+          if (used.has(s)) continue;
+          chosen = s;
+          break;
+        }
+        if (chosen !== null) {
+          used.add(chosen);
+          paired.add(chosen);
+        }
+      }
+      return paired;
     };
 
     // Group by question
@@ -101,10 +119,8 @@ Deno.serve(async (req) => {
 
     const sectionMap = new Map((sections ?? []).map((s: any) => [s.id, s]));
 
-    // Build categories
     const orgQuestions: any[] = [];
-    const leaderQuestions: any[] = []; // template per leadership question
-
+    const leaderQuestions: any[] = [];
     (questions ?? []).forEach((q: any) => {
       const sec = sectionMap.get(q.section_id);
       if (!sec) return;
@@ -118,13 +134,11 @@ Deno.serve(async (req) => {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const STOPWORDS = new Set(["sem comentarios", "e", "."]);
 
-    const buildQuestionStats = (q: any, rs: any[], useTotal = false) => {
-      const respondent_count = countRespondents(rs, useTotal);
-      const respondent_count_approx = !useTotal;
+    const buildQuestionStats = (q: any, rs: any[]) => {
+      // Respondent count por pergunta = sessões distintas (já filtradas para pareadas no bucket)
+      const respondent_count = new Set(rs.map((r) => new Date(r.submitted_at).toISOString())).size;
       if (q.question_type === "text") {
         const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
-        // Count duplicates across ALL non-empty submissions (before stopword filtering)
-        // so the "possíveis resubmissões" tag reflects the original repeat count.
         const rawSeen = new Set<string>();
         let duplicates_removed = 0;
         for (const t of raw) {
@@ -132,7 +146,6 @@ Deno.serve(async (req) => {
           if (rawSeen.has(key)) { duplicates_removed++; continue; }
           rawSeen.add(key);
         }
-        // Build the displayed list: unique + non-stopword
         const seen = new Set<string>();
         const comments: string[] = [];
         for (const t of raw) {
@@ -142,10 +155,8 @@ Deno.serve(async (req) => {
           if (STOPWORDS.has(key)) continue;
           comments.push(t);
         }
-        return { ...q, type: "text", total: comments.length, raw_total: raw.length, duplicates_removed, respondent_count, respondent_count_approx, comments };
-
+        return { ...q, type: "text", total: comments.length, raw_total: raw.length, duplicates_removed, respondent_count, comments };
       }
-
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
       let total = 0;
@@ -155,63 +166,77 @@ Deno.serve(async (req) => {
       const distribution = Object.entries(dist).map(([value, count]) => ({
         value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
       }));
-      return { ...q, type: "scale", total, respondent_count, respondent_count_approx, distribution };
+      return { ...q, type: "scale", total, respondent_count, distribution };
     };
 
-    const buildCategory = (key: string, label: string, qs: any[], filter: (r: any) => boolean, useTotal = false) => {
-      const catResponses = (responses ?? []).filter(filter);
-      const respondent_count = countRespondents(catResponses, useTotal);
+    type BucketSpec = {
+      key: string;
+      label: string;
+      questions: any[];
+      baseFilter: (r: any) => boolean;
+      denominatorMode: "total" | "distinct_sessions";
+    };
+
+    const buildBucket = (spec: BucketSpec) => {
+      const bucketResponses = (responses ?? []).filter(spec.baseFilter);
+      const paired = pairSessions(bucketResponses);
+      const filterPaired = (r: any) => paired.has(new Date(r.submitted_at).getTime());
+      const pairedResponses = bucketResponses.filter(filterPaired);
+
+      const respondent_count = paired.size;
+
+      let respondent_total: number;
+      if (spec.denominatorMode === "total") {
+        respondent_total = totalRespondents;
+      } else {
+        // Total de sessões distintas originais (assume 1 sessão = 1 pessoa elegível)
+        respondent_total = new Set(
+          bucketResponses.map((r) => new Date(r.submitted_at).getTime()),
+        ).size;
+        // Garantir que o denominador nunca seja menor que o numerador
+        if (respondent_total < respondent_count) respondent_total = respondent_count;
+      }
+
       return {
-        key, label, respondent_count,
-        respondent_count_approx: !useTotal,
-        questions: qs.map((q) => buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter(filter), useTotal)),
+        key: spec.key,
+        label: spec.label,
+        respondent_count,
+        respondent_total,
+        questions: spec.questions.map((q) =>
+          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterPaired(r))),
+        ),
       };
     };
 
-    // ---- Pair organizational submission sessions to respondents ----
-    // Goal: keep exactly one session per respondent so per-question distributions
-    // sum to the real respondent count (no resubmissions double-counted).
-    const orgResponses = (responses ?? []).filter((r: any) => !r.evaluated_leader);
-    const orgSessions = Array.from(
-      new Set(orgResponses.map((r: any) => new Date(r.submitted_at).getTime())),
-    ).sort((a, b) => a - b);
-
-    const WINDOW_BEFORE = 6 * 60 * 60 * 1000; // 6h before responded_at
-    const WINDOW_AFTER = 30 * 60 * 1000;       // 30min after
-    const usedSessions = new Set<number>();
-    const pairedSessions = new Set<number>();
-
-    // Process respondents from latest to earliest so newer responses claim their
-    // matching session first (typically the most recent submission).
-    const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
-    for (const r of sortedResp) {
-      const lo = r.t - WINDOW_BEFORE;
-      const hi = r.t + WINDOW_AFTER;
-      // Pick the latest unused session inside the window
-      let chosen: number | null = null;
-      for (let i = orgSessions.length - 1; i >= 0; i--) {
-        const s = orgSessions[i];
-        if (s > hi) continue;
-        if (s < lo) break;
-        if (usedSessions.has(s)) continue;
-        chosen = s;
-        break;
-      }
-      if (chosen !== null) {
-        usedSessions.add(chosen);
-        pairedSessions.add(chosen);
-      }
-    }
-
-    const orgFilter = (r: any) =>
-      !r.evaluated_leader && pairedSessions.has(new Date(r.submitted_at).getTime());
-
     const categories = [
-      buildCategory("organizacional", "Organizacional", orgQuestions, orgFilter, true),
-      buildCategory("lider-area", "Líder de Área", leaderQuestions,
-        (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX),
-      buildCategory("cid", "Cid Lauro Vale Junior", leaderQuestions, (r) => r.evaluated_leader === CID),
-      buildCategory("alexandre", "Alexandre Daguano", leaderQuestions, (r) => r.evaluated_leader === ALEX),
+      buildBucket({
+        key: "organizacional",
+        label: "Organizacional",
+        questions: orgQuestions,
+        baseFilter: (r) => !r.evaluated_leader,
+        denominatorMode: "total",
+      }),
+      buildBucket({
+        key: "lider-area",
+        label: "Líder de Área",
+        questions: leaderQuestions,
+        baseFilter: (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
+        denominatorMode: "distinct_sessions",
+      }),
+      buildBucket({
+        key: "cid",
+        label: CID,
+        questions: leaderQuestions,
+        baseFilter: (r) => r.evaluated_leader === CID,
+        denominatorMode: "total",
+      }),
+      buildBucket({
+        key: "alexandre",
+        label: ALEX,
+        questions: leaderQuestions,
+        baseFilter: (r) => r.evaluated_leader === ALEX,
+        denominatorMode: "total",
+      }),
     ];
 
     return json({
