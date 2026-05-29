@@ -168,8 +168,46 @@ Deno.serve(async (req) => {
       };
     };
 
+    // ---- Pair organizational submission sessions to respondents ----
+    // Goal: keep exactly one session per respondent so per-question distributions
+    // sum to the real respondent count (no resubmissions double-counted).
+    const orgResponses = (responses ?? []).filter((r: any) => !r.evaluated_leader);
+    const orgSessions = Array.from(
+      new Set(orgResponses.map((r: any) => new Date(r.submitted_at).getTime())),
+    ).sort((a, b) => a - b);
+
+    const WINDOW_BEFORE = 6 * 60 * 60 * 1000; // 6h before responded_at
+    const WINDOW_AFTER = 30 * 60 * 1000;       // 30min after
+    const usedSessions = new Set<number>();
+    const pairedSessions = new Set<number>();
+
+    // Process respondents from latest to earliest so newer responses claim their
+    // matching session first (typically the most recent submission).
+    const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
+    for (const r of sortedResp) {
+      const lo = r.t - WINDOW_BEFORE;
+      const hi = r.t + WINDOW_AFTER;
+      // Pick the latest unused session inside the window
+      let chosen: number | null = null;
+      for (let i = orgSessions.length - 1; i >= 0; i--) {
+        const s = orgSessions[i];
+        if (s > hi) continue;
+        if (s < lo) break;
+        if (usedSessions.has(s)) continue;
+        chosen = s;
+        break;
+      }
+      if (chosen !== null) {
+        usedSessions.add(chosen);
+        pairedSessions.add(chosen);
+      }
+    }
+
+    const orgFilter = (r: any) =>
+      !r.evaluated_leader && pairedSessions.has(new Date(r.submitted_at).getTime());
+
     const categories = [
-      buildCategory("organizacional", "Organizacional", orgQuestions, (r) => !r.evaluated_leader, true),
+      buildCategory("organizacional", "Organizacional", orgQuestions, orgFilter, true),
       buildCategory("lider-area", "Líder de Área", leaderQuestions,
         (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX),
       buildCategory("cid", "Cid Lauro Vale Junior", leaderQuestions, (r) => r.evaluated_leader === CID),
