@@ -156,7 +156,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
     );
   }
 
-  const totalResponses = category.questions.reduce((a, q) => a + q.total, 0);
+  const respondents = category.respondent_count ?? 0;
 
   let qIdx = 0;
   return (
@@ -168,8 +168,8 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
           <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold font-display tabular-nums">{totalResponses}</p>
-          <p className="text-xs text-muted-foreground">respostas totais</p>
+          <p className="text-3xl font-bold font-display tabular-nums">{respondents}</p>
+          <p className="text-xs text-muted-foreground">{respondents === 1 ? "respondente" : "respondentes"}</p>
         </div>
       </div>
 
