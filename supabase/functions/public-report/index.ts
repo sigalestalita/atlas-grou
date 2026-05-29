@@ -83,31 +83,22 @@ Deno.serve(async (req) => {
 
     const totalRespondents = respList?.length ?? 0;
 
-    // Helper: deduplica sessões consecutivas no mesmo bucket separadas por gap pequeno
-    // (resubmissão da mesma pessoa — mantém a mais recente), depois pareia cada sessão
-    // restante a um respondent via responded_at.
+    // Pareia cada sessão a um respondent via responded_at. Cada respondent reivindica
+    // no máximo 1 sessão dentro da janela; sessões duplicadas (resubmissão da mesma
+    // pessoa) ficam não-pareadas e são tratadas como duplicatas no numerador.
     const pairSessions = (rs: any[]): { paired: Set<number>; respondentCount: number } => {
-      const allSessions = Array.from(
+      const sessions = Array.from(
         new Set(rs.map((r: any) => new Date(r.submitted_at).getTime())),
       ).sort((a, b) => a - b);
-
-      const dedupedSessions: number[] = [];
-      for (let i = 0; i < allSessions.length; i++) {
-        const cur = allSessions[i];
-        const next = allSessions[i + 1];
-        if (next != null && next - cur < DUPLICATE_GAP_MS) continue; // descarta a anterior
-        dedupedSessions.push(cur);
-      }
-
       const used = new Set<number>();
-      const paired = new Set<number>(dedupedSessions);
+      const paired = new Set<number>(sessions);
       const covered = new Set<string>();
       const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
       for (const r of sortedResp) {
         const lo = r.t - WINDOW_BEFORE;
         const hi = r.t + WINDOW_AFTER;
         let best: { s: number; abs: number } | null = null;
-        for (const s of dedupedSessions) {
+        for (const s of sessions) {
           if (s < lo || s > hi || used.has(s)) continue;
           const abs = Math.abs(s - r.t);
           if (!best || abs < best.abs) best = { s, abs };
