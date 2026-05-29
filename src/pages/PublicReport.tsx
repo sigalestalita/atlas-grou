@@ -11,6 +11,7 @@ type Question = {
   section_title: string;
   type: "scale" | "text";
   total: number;
+  raw_total?: number;
   distribution?: Distribution[];
   comments?: string[];
 };
@@ -202,11 +203,16 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
         </div>
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
-          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
             {isText ? <MessageSquareQuote className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
             <span>
-              {q.total} {isText ? (q.total === 1 ? "comentário" : "comentários") : (q.total === 1 ? "resposta" : "respostas")}
+              {q.total} {isText ? (q.total === 1 ? "comentário único" : "comentários únicos") : (q.total === 1 ? "resposta" : "respostas")}
             </span>
+            {isText && q.raw_total !== undefined && q.raw_total > q.total && (
+              <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-medium">
+                {q.raw_total - q.total} duplicado{q.raw_total - q.total === 1 ? "" : "s"} removido{q.raw_total - q.total === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
         </div>
       </div>

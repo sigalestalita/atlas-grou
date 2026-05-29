@@ -86,12 +86,23 @@ Deno.serve(async (req) => {
       else orgQuestions.push(item);
     });
 
+    const normalize = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+
     const buildQuestionStats = (q: any, rs: any[]) => {
       if (q.question_type === "text") {
-        const comments = rs
+        const raw = rs
           .map((r) => (r.text_value ?? "").trim())
           .filter((t) => t.length > 0);
-        return { ...q, type: "text", total: comments.length, comments };
+        // Dedup by normalized text — removes re-submissions/duplicate entries
+        const seen = new Set<string>();
+        const comments: string[] = [];
+        for (const t of raw) {
+          const key = normalize(t);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          comments.push(t);
+        }
+        return { ...q, type: "text", total: comments.length, raw_total: raw.length, comments };
       }
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
