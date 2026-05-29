@@ -226,8 +226,10 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 )}
               </span>
             ) : (
-              <span>
-                {q.respondent_count ?? q.total} {(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
+              <span title={q.respondent_count_approx ? "Inclui possíveis resubmissões" : undefined}>
+                {q.respondent_count ?? q.total}
+                {q.respondent_count_approx && <span className="text-muted-foreground/70">*</span>}
+                {" "}{(q.respondent_count ?? q.total) === 1 ? "respondente" : "respondentes"}
               </span>
             )}
             {isText && q.raw_total !== undefined && q.raw_total > q.total && (
