@@ -211,7 +211,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   }
 
   const respondents = category.respondent_count ?? 0;
-  const approx = category.respondent_count_approx;
+  const total = category.respondent_total;
 
   let qIdx = 0;
   return (
@@ -224,10 +224,10 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
         </div>
         <div className="text-right">
           <p className="text-3xl font-bold font-display tabular-nums">
-            {respondents}
+            {respondents}{total != null ? <span className="text-muted-foreground/70 text-2xl"> / {total}</span> : null}
           </p>
           <p className="text-xs text-muted-foreground">
-            {respondents === 1 ? "respondente" : "respondentes"}
+            {total != null ? "respondentes" : (respondents === 1 ? "respondente" : "respondentes")}
           </p>
         </div>
       </div>
