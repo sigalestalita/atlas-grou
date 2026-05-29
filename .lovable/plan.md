@@ -1,45 +1,45 @@
 ## Objetivo
 
-Cruzar os 23 respondentes da Tectaris marcados como "respondido" com as respostas reais no banco, e dizer **quais completaram 100%** das perguntas que o sistema deveria ter mostrado para cada um, com base no perfil (colaborador / líder de área).
+A versão "dinâmica" do relatório já existe em `/relatorio/:slug` (page `PublicReport.tsx` + edge function `public-report`). Hoje ela mostra **todos** os comentários, incluindo reenvios/duplicatas. Vou aplicar o mesmo critério de deduplicação que usei no PDF, direto na fonte de dados — assim o link público passa a refletir apenas comentários únicos por respondente.
 
-## Como vou determinar o "esperado"
+## O que muda
 
-Pela lógica de `SurveyPage.tsx` e pela config da pesquisa (48 perguntas organizacionais + 6 perguntas por líder avaliado):
+### 1. Edge function `supabase/functions/public-report/index.ts`
 
-| Perfil | Esperado |
-|---|---|
-| Líder de área (8 nomes: Cezar, Elizangela, Gustavo, Silvia, Stephany, Tarcisio, Eduardo, Mariana) | 48 org + 2×6 (Cid + Alexandre) = **60** |
-| Colaborador (15 demais) | 48 org + 1×6 (1 líder de área escolhido) + 2×6 (Cid + Alexandre) = **66** |
+Na função `buildQuestionStats`, ao processar perguntas de texto:
+- Normalizar o texto (trim + colapsar espaços + lowercase) só para a chave de comparação.
+- Manter o texto original (com capitalização e pontuação) para exibição.
+- Remover duplicatas exatas dentro da mesma pergunta + categoria (a categoria já é aplicada antes, no filtro por `evaluated_leader`).
+- Retornar também `raw_total` (total antes do dedupe) para podermos exibir "X duplicados removidos".
 
-Cid e Alexandre não aparecem na lista de respondentes (líderes empresariais não respondem nada nesta pesquisa — saem direto no `no_evaluation`).
+Importante: o dedupe acontece **por categoria** (Organizacional, Líder de Área, Cid, Alexandre) porque o filtro de `evaluated_leader` já segmenta as respostas antes de chegar no `buildQuestionStats`. Comentário idêntico endereçado a líderes diferentes continua aparecendo nas duas categorias — é o comportamento correto.
 
-## Como vou ligar respondente ↔ submissão
+### 2. Página `src/pages/PublicReport.tsx`
 
-Como as respostas são anônimas (sem `respondent_id`), o vínculo é feito por:
-1. Agrupar as linhas de `survey_responses` em "envios" usando `submitted_at` (janela de 5 min + mesma combinação de líderes avaliados), igual ao `Export.tsx` já faz.
-2. Para cada respondente, encontrar o envio com `submitted_at` mais próximo do `responded_at` dele.
-3. Contar quantas perguntas distintas esse envio cobriu e comparar com o esperado.
+Pequeno ajuste cosmético no `QuestionCard` das perguntas de texto:
+- Quando `raw_total > total`, exibir uma chip discreta "N duplicado(s) removido(s)" ao lado da contagem de comentários únicos, para deixar transparente para quem ler o link que estamos filtrando reenvios.
 
-Observação: como existem 30 envios no banco e 23 respondentes marcados, alguns respondentes podem casar com mais de um envio (reenvio); nesse caso somo as perguntas únicas respondidas pelo mesmo respondente.
+### 3. Sem mudanças no banco
 
-## Entrega
+Nada é apagado. O dedupe é só na camada de leitura — os dados brutos continuam intactos em `survey_responses`.
 
-Um PDF curto em `/mnt/documents/tectaris_completude_por_link.pdf` com:
+## Impacto esperado (já confirmado pelos dados)
 
-1. **Resumo** — X de 23 completaram 100%, Y completaram só a parte organizacional (48), Z ficaram em algum ponto intermediário.
-2. **Tabela** com uma linha por respondente:
-   - Nome
-   - Perfil (Colaborador / Líder de área)
-   - Perguntas respondidas / esperadas (ex.: 48/66)
-   - % completo
-   - Status: ✅ 100% | ⚠️ só organizacional | ⚠️ parcial | ❌ sem envio identificado
-   - Data/hora do envio
-3. **Nota metodológica** explicando o método de pareamento por timestamp e suas limitações (envio anônimo, casamento por proximidade temporal — margem de erro pequena mas não-zero).
+Comparando com o PDF que acabei de gerar:
 
-Se preferir Excel em vez de PDF, me diga antes de eu rodar.
+| Categoria | Comentários brutos | Únicos (após dedupe) |
+|---|---|---|
+| Organizacional | ~450 | 409 |
+| Líder de Área | ~17 | 15 |
+| Cid | ~23 | 21 |
+| Alexandre | ~25 | 23 |
 
-## Detalhes técnicos
+A queda nas perguntas de escala (gráficos de barra) **não acontece** — escala continua somando todas as respostas, como hoje.
 
-- Query base: `survey_responses` + `respondents` + `survey_questions` (filtrar `question_type != 'open_text'` para contagem de obrigatórias, mas vou também contar as abertas separadamente).
-- Script Python com `psycopg`/CSV → `reportlab` para o PDF, mesmo padrão dos outros entregáveis Tectaris.
-- Sem alterações no app/código do Atlas.
+## Onde ver depois
+
+Mesmo link de sempre: `https://atlas.grougp.com.br/relatorio/tectaris` (ou a URL equivalente no preview/published). A edge function é redeployada automaticamente.
+
+## Observação
+
+Esse comportamento será aplicado a **todas as empresas** que usam o relatório público — não só Tectaris. Acho razoável (dedupe de comentário idêntico é desejável em qualquer caso), mas se você quiser ligar isso só para Tectaris, me diga antes que eu coloco um flag.
