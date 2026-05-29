@@ -27,6 +27,13 @@ import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import PublicReport from "@/pages/PublicReport";
 import NotFound from "./pages/NotFound";
+import { useParams } from "react-router-dom";
+
+function ResultSlugGate() {
+  const { resultSlug } = useParams();
+  if (resultSlug && resultSlug.startsWith("result-")) return <PublicReport />;
+  return <NotFound />;
+}
 
 const queryClient = new QueryClient();
 
@@ -50,7 +57,7 @@ const App = () => (
 
             {/* Public shareable report */}
             <Route path="/relatorio/:slug" element={<PublicReport />} />
-            <Route path="/result-:slug" element={<PublicReport />} />
+            <Route path="/:resultSlug" element={<ResultSlugGate />} />
 
             {/* Admin routes */}
             <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
