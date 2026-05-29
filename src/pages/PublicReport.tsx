@@ -159,6 +159,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   }
 
   const respondents = category.respondent_count ?? 0;
+  const approx = category.respondent_count_approx;
 
   let qIdx = 0;
   return (
@@ -170,8 +171,16 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
           <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold font-display tabular-nums">{respondents}</p>
-          <p className="text-xs text-muted-foreground">{respondents === 1 ? "respondente" : "respondentes"}</p>
+          <p
+            className="text-3xl font-bold font-display tabular-nums"
+            title={approx ? "Inclui possíveis resubmissões (sessões de submissão distintas)" : undefined}
+          >
+            {respondents}{approx && <span className="text-muted-foreground">*</span>}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {respondents === 1 ? "respondente" : "respondentes"}
+            {approx && <span title="Inclui possíveis resubmissões"> *</span>}
+          </p>
         </div>
       </div>
 
