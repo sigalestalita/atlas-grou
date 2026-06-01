@@ -373,3 +373,73 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
     </Card>
   );
 }
+
+function EnpsView({ q }: { q: Question }) {
+  const e = q.enps!;
+  const dist = q.distribution ?? [];
+  const colorFor = (v: number) =>
+    v >= 9 ? "hsl(145 60% 42%)" : v >= 7 ? "hsl(45 90% 55%)" : "hsl(0 72% 55%)";
+  const scoreColor = e.score >= 50 ? "hsl(145 60% 42%)"
+    : e.score >= 0 ? "hsl(45 90% 55%)"
+    : "hsl(0 72% 55%)";
+  return (
+    <div className="space-y-6">
+      {/* Score */}
+      <div className="flex items-center justify-between gap-6 rounded-xl border bg-muted/30 p-5">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Score eNPS</p>
+          <p className="text-4xl font-bold font-display tabular-nums mt-1" style={{ color: scoreColor }}>
+            {e.score > 0 ? `+${e.score}` : e.score}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Promotores − Detratores · {q.total} {q.total === 1 ? "resposta" : "respostas"}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Promotores</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(145 60% 42%)" }}>{e.promoters_pct.toFixed(0)}%</p>
+            <p className="text-[11px] text-muted-foreground">({e.promoters}) · 9–10</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Neutros</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(45 90% 50%)" }}>{e.passives_pct.toFixed(0)}%</p>
+            <p className="text-[11px] text-muted-foreground">({e.passives}) · 7–8</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Detratores</p>
+            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(0 72% 55%)" }}>{e.detractors_pct.toFixed(0)}%</p>
+            <p className="text-[11px] text-muted-foreground">({e.detractors}) · 0–6</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Distribution 0-10 */}
+      <div className="space-y-2">
+        {dist.slice().reverse().map((d) => {
+          const color = colorFor(d.value);
+          return (
+            <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
+              <div className="flex items-center gap-2 w-16">
+                <div
+                  className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
+                  style={{ backgroundColor: color }}
+                >
+                  {d.value}
+                </div>
+              </div>
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${d.percent}%`, backgroundColor: color }}
+                />
+              </div>
+              <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
+                <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
+                <span className="text-xs text-muted-foreground">({d.count})</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
