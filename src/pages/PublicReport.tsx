@@ -9,11 +9,19 @@ import introBg from "@/assets/intro-bg.png";
 
 type Distribution = { value: number; count: number; percent: number };
 type CommentsByLeader = { leader: string; comments: string[] };
+type EnpsStats = {
+  promoters: number; passives: number; detractors: number;
+  promoters_pct: number; passives_pct: number; detractors_pct: number;
+  score: number;
+};
 type Question = {
   id: string;
   text: string;
   section_title: string;
   type: "scale" | "text";
+  scale_type?: string;
+  scale_min?: number;
+  scale_max?: number;
   total: number;
   raw_total?: number;
   duplicates_removed?: number;
@@ -21,6 +29,7 @@ type Question = {
   distribution?: Distribution[];
   comments?: string[];
   comments_by_leader?: CommentsByLeader[];
+  enps?: EnpsStats;
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
 type ReportData = {
