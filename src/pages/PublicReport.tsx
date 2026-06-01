@@ -8,6 +8,7 @@ import grouLogo from "@/assets/grou-logo.png";
 import introBg from "@/assets/intro-bg.png";
 
 type Distribution = { value: number; count: number; percent: number };
+type CommentsByLeader = { leader: string; comments: string[] };
 type Question = {
   id: string;
   text: string;
@@ -19,6 +20,7 @@ type Question = {
   respondent_count?: number;
   distribution?: Distribution[];
   comments?: string[];
+  comments_by_leader?: CommentsByLeader[];
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
 type ReportData = {
