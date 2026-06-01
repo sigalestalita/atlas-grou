@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
     const { data: questions } = await supabase
       .from("survey_questions")
-      .select("id, section_id, text, question_type, sort_order")
+      .select("id, section_id, text, question_type, scale_type, sort_order")
       .in("section_id", (sections ?? []).map((s: any) => s.id))
       .order("sort_order");
 
@@ -180,8 +180,11 @@ Deno.serve(async (req) => {
         }
         return base;
       }
+      const isEnps = q.scale_type === "enps";
+      const scaleMin = isEnps ? 0 : survey.scale_min;
+      const scaleMax = isEnps ? 10 : survey.scale_max;
       const dist: Record<number, number> = {};
-      for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
+      for (let v = scaleMin; v <= scaleMax; v++) dist[v] = 0;
       let total = 0;
       rs.forEach((r) => {
         if (r.value != null && dist[r.value] !== undefined) { dist[r.value]++; total++; }
@@ -189,7 +192,26 @@ Deno.serve(async (req) => {
       const distribution = Object.entries(dist).map(([value, count]) => ({
         value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
       }));
-      return { ...q, type: "scale", total, respondent_count, distribution };
+      const base: any = { ...q, type: "scale", scale_min: scaleMin, scale_max: scaleMax, total, respondent_count, distribution };
+      if (isEnps) {
+        let promoters = 0, passives = 0, detractors = 0;
+        rs.forEach((r) => {
+          if (r.value == null) return;
+          if (r.value >= 9) promoters++;
+          else if (r.value >= 7) passives++;
+          else detractors++;
+        });
+        const pctP = total > 0 ? (promoters / total) * 100 : 0;
+        const pctD = total > 0 ? (detractors / total) * 100 : 0;
+        base.enps = {
+          promoters, passives, detractors,
+          promoters_pct: pctP,
+          passives_pct: total > 0 ? (passives / total) * 100 : 0,
+          detractors_pct: pctD,
+          score: Math.round(pctP - pctD),
+        };
+      }
+      return base;
     };
 
     type BucketSpec = {
