@@ -198,7 +198,9 @@ Deno.serve(async (req) => {
       questions: any[];
       baseFilter: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
+      groupCommentsByLeader?: boolean;
     };
+
 
     // Overrides manuais por survey: corrigem contagens quando o pareamento
     // heurístico não consegue distinguir resubmissões anônimas próximas no tempo.
