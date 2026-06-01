@@ -266,7 +266,7 @@ Deno.serve(async (req) => {
         respondent_count,
         respondent_total,
         questions: spec.questions.map((q) =>
-          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r))),
+          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r)), spec.groupCommentsByLeader),
         ),
       };
     };
