@@ -91,7 +91,6 @@ Deno.serve(async (req) => {
         new Set(rs.map((r: any) => new Date(r.submitted_at).getTime())),
       ).sort((a, b) => a - b);
       const used = new Set<number>();
-      const paired = new Set<number>(sessions);
       const covered = new Set<string>();
       const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
       for (const r of sortedResp) {
@@ -108,8 +107,9 @@ Deno.serve(async (req) => {
           covered.add(r.id);
         }
       }
-      return { paired, respondentCount: covered.size };
+      return { paired: used, respondentCount: covered.size };
     };
+
 
 
 

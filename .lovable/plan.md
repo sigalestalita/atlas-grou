@@ -1,26 +1,19 @@
 ## Problema
 
-Após o login, há um "blip" alternando entre **Sem acesso** e a tela de **Empresas**. Causa:
-
-`src/lib/auth.tsx` marca `loading = false` assim que a sessão chega, mas o fetch de `user_roles` é disparado via `setTimeout(..., 0)` e ainda não terminou. Nesse intervalo, `AdminIndex` vê `loading=false` + `roles=[]` e renderiza **Sem acesso**. Quando os roles chegam, o componente re-renderiza e redireciona para `/admin/companies` (super_admin) ou `/admin/dashboard` (company_admin).
-
-O mesmo problema afeta `RequireAuth` em qualquer guarda baseada em role.
+Em `supabase/functions/public-report/index.ts`, a função `pairSessions` retorna `paired` contendo **todas** as sessões do bucket, em vez de apenas as que foram efetivamente pareadas a um respondent. Para o bucket Organizacional, isso faz com que a soma da distribuição por pergunta seja 30 (sessões brutas) mesmo com `respondent_count = 23` (respondentes únicos).
 
 ## Mudança
 
-Adicionar um estado dedicado de carregamento de roles em `AuthContext` e fazer com que `loading` só seja `false` quando **sessão + roles** estiverem resolvidos.
+Em `pairSessions`, retornar como `paired` o set de sessões que foram realmente associadas a algum respondent (atualmente rastreado pela variável `used`), em vez de `new Set(sessions)`.
 
-### `src/lib/auth.tsx`
-- Tornar `fetchRoles` retornar a Promise (sem `setTimeout`) e fazer `onAuthStateChange` aguardar — ou expor `rolesLoading` separado.
-- Abordagem escolhida: manter `loading` como flag única que só vira `false` depois de:
-  - `getSession()` resolver, e
-  - se houver `user`, `fetchRoles(user.id)` resolver.
-- No `onAuthStateChange`: setar `loading=true` ao entrar, aguardar `fetchRoles` (quando há sessão) e então `loading=false`. Continuar usando microtask (`queueMicrotask` ou `setTimeout 0`) só para evitar deadlock dentro do callback do Supabase, mas sem liberar `loading` antes do fetch.
+Isso faz com que `filterActive` em `buildBucket` exclua sessões duplicadas/órfãs também no nível de pergunta, alinhando a soma da distribuição com o `respondent_count` do bucket.
 
-### Consumidores
-- `src/pages/admin/AdminIndex.tsx` e `src/components/RequireAuth.tsx` já consultam `loading` — ficam corretos automaticamente. Nenhuma mudança necessária além de confirmar que não há outra checagem de role sem respeitar `loading`.
+Para os buckets de líder (Cid, Alexandre, Líder de Área), o `COUNT_OVERRIDES` + `dedupSessionsToTarget` continua sobrescrevendo `activeSessions` quando aplicável — comportamento atual preservado.
 
 ## Validação
-- Logar como super_admin → ir direto para `/admin/companies` sem flash de **Sem acesso**.
-- Logar como company_admin → ir direto para `/admin/dashboard`.
-- Usuário sem role → ver **Sem acesso** de forma estável (sem alternância).
+
+Recarregar `/relatorio/tectaris` e conferir que a soma da distribuição em cada pergunta bate com o pill da categoria:
+- Organizacional: 23 (era 30)
+- Líder de Área: 13
+- Cid: 19
+- Alexandre: 21
