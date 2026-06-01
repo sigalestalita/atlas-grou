@@ -303,6 +303,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => r.evaluated_leader === ALEX,
         denominatorMode: "total",
+        groupCommentsByLeader: true,
       }),
     ];
 
