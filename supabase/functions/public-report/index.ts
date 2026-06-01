@@ -141,28 +141,44 @@ Deno.serve(async (req) => {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const STOPWORDS = new Set(["sem comentarios", "e", "."]);
 
-    const buildQuestionStats = (q: any, rs: any[]) => {
+    const buildQuestionStats = (q: any, rs: any[], groupByLeader = false) => {
       // Respondent count por pergunta = sessões distintas (já filtradas para pareadas no bucket)
       const respondent_count = new Set(rs.map((r) => new Date(r.submitted_at).toISOString())).size;
       if (q.question_type === "text") {
-        const raw = rs.map((r) => (r.text_value ?? "").trim()).filter((t) => t.length > 0);
+        const rawItems = rs
+          .map((r) => ({ text: (r.text_value ?? "").trim(), leader: (r.evaluated_leader ?? "").trim() }))
+          .filter((it) => it.text.length > 0);
         const rawSeen = new Set<string>();
         let duplicates_removed = 0;
-        for (const t of raw) {
-          const key = normalize(t);
+        for (const it of rawItems) {
+          const key = normalize(it.text);
           if (rawSeen.has(key)) { duplicates_removed++; continue; }
           rawSeen.add(key);
         }
         const seen = new Set<string>();
         const comments: string[] = [];
-        for (const t of raw) {
-          const key = normalize(t);
+        const itemsKept: { text: string; leader: string }[] = [];
+        for (const it of rawItems) {
+          const key = normalize(it.text);
           if (seen.has(key)) continue;
           seen.add(key);
           if (STOPWORDS.has(key)) continue;
-          comments.push(t);
+          comments.push(it.text);
+          itemsKept.push(it);
         }
-        return { ...q, type: "text", total: comments.length, raw_total: raw.length, duplicates_removed, respondent_count, comments };
+        const base: any = { ...q, type: "text", total: comments.length, raw_total: rawItems.length, duplicates_removed, respondent_count, comments };
+        if (groupByLeader) {
+          const byLeader = new Map<string, string[]>();
+          for (const it of itemsKept) {
+            const leader = it.leader || "Sem identificação";
+            if (!byLeader.has(leader)) byLeader.set(leader, []);
+            byLeader.get(leader)!.push(it.text);
+          }
+          base.comments_by_leader = Array.from(byLeader.entries())
+            .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+            .map(([leader, comments]) => ({ leader, comments }));
+        }
+        return base;
       }
       const dist: Record<number, number> = {};
       for (let v = survey.scale_min; v <= survey.scale_max; v++) dist[v] = 0;
@@ -182,7 +198,9 @@ Deno.serve(async (req) => {
       questions: any[];
       baseFilter: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
+      groupCommentsByLeader?: boolean;
     };
+
 
     // Overrides manuais por survey: corrigem contagens quando o pareamento
     // heurístico não consegue distinguir resubmissões anônimas próximas no tempo.
@@ -248,7 +266,7 @@ Deno.serve(async (req) => {
         respondent_count,
         respondent_total,
         questions: spec.questions.map((q) =>
-          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r))),
+          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r)), spec.groupCommentsByLeader),
         ),
       };
     };
@@ -269,6 +287,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
         denominatorMode: "distinct_sessions",
+        groupCommentsByLeader: true,
       }),
       buildBucket({
         key: "cid",
@@ -276,6 +295,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => r.evaluated_leader === CID,
         denominatorMode: "total",
+        groupCommentsByLeader: true,
       }),
       buildBucket({
         key: "alexandre",
@@ -283,6 +303,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => r.evaluated_leader === ALEX,
         denominatorMode: "total",
+        groupCommentsByLeader: true,
       }),
     ];
 
