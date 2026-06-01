@@ -287,6 +287,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
         denominatorMode: "distinct_sessions",
+        groupCommentsByLeader: true,
       }),
       buildBucket({
         key: "cid",
@@ -294,6 +295,7 @@ Deno.serve(async (req) => {
         questions: leaderQuestions,
         baseFilter: (r) => r.evaluated_leader === CID,
         denominatorMode: "total",
+        groupCommentsByLeader: true,
       }),
       buildBucket({
         key: "alexandre",
