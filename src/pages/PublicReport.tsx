@@ -281,6 +281,9 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
       {/* Card body */}
       <div className="p-5">
         {!isText && q.distribution && (
+          q.scale_type === "enps" && q.enps ? (
+            <EnpsView q={q} />
+          ) : (
           <div className="space-y-2.5">
             {q.distribution
               .slice()
@@ -320,6 +323,7 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 );
               })}
           </div>
+          )
         )}
 
         {isText && (
