@@ -1,46 +1,26 @@
 ## Problema
 
-A função `supabase/functions/public-report/index.ts` infla os contadores dos buckets de líder porque conta **sessões de envio** (`DISTINCT submitted_at`) em vez de **respondentes únicos**. Quando um colaborador reabriu o link e enviou duas vezes (ex.: refez a parte organizacional e na 2ª sessão respondeu os líderes), cada envio aparece como um respondente novo.
+Após o login, há um "blip" alternando entre **Sem acesso** e a tela de **Empresas**. Causa:
 
-Números atuais (errados) vs. esperados:
+`src/lib/auth.tsx` marca `loading = false` assim que a sessão chega, mas o fetch de `user_roles` é disparado via `setTimeout(..., 0)` e ainda não terminou. Nesse intervalo, `AdminIndex` vê `loading=false` + `roles=[]` e renderiza **Sem acesso**. Quando os roles chegam, o componente re-renderiza e redireciona para `/admin/companies` (super_admin) ou `/admin/dashboard` (company_admin).
 
-| Categoria | Hoje | Correto |
-|---|---|---|
-| Organizacional | 23 | 23 |
-| Líder de Área | 15 | 13 (de 15) |
-| Cid Lauro Vale Junior | 21 | 19 (de 23) |
-| Alexandre Daguano | 23 | 21 (de 23) |
-
-A lógica de pareamento sessão→respondente (janela 6h antes / 30min depois do `responded_at`) já existe — mas só é aplicada ao bucket Organizacional. Os buckets de líder usam `countRespondents` com `useTotal=false`, que apenas faz `Set(submitted_at).size`.
+O mesmo problema afeta `RequireAuth` em qualquer guarda baseada em role.
 
 ## Mudança
 
-Aplicar o mesmo pareamento sessão→respondente aos buckets de líder, **separadamente por bucket** (porque cada respondente pode ter sessões diferentes para "líder de área", "Cid" e "Alexandre"):
+Adicionar um estado dedicado de carregamento de roles em `AuthContext` e fazer com que `loading` só seja `false` quando **sessão + roles** estiverem resolvidos.
 
-1. Para cada bucket (Líder de Área, Cid, Alexandre): coletar `submitted_at`s distintos das respostas que pertencem àquele bucket.
-2. Para cada `respondent.responded_at`, escolher a última sessão do bucket dentro da janela (6h antes / 30min depois) e marcá-la como "pareada", garantindo 1 sessão por respondente.
-3. Filtrar as respostas do bucket para considerar apenas sessões pareadas (mesma técnica do `pairedSessions` já usado em Organizacional).
-4. Para o denominador "de X" (ex.: "21 de 23"), expor também o total de respondentes elegíveis ao bucket — para os líderes Cid/Alexandre o denominador é 23 (todos os respondentes), para "Líder de Área" o denominador é 15 (respondentes cujo `department_leadership` ≠ Cid e ≠ Alexandre, vindo da tabela `respondents`).
+### `src/lib/auth.tsx`
+- Tornar `fetchRoles` retornar a Promise (sem `setTimeout`) e fazer `onAuthStateChange` aguardar — ou expor `rolesLoading` separado.
+- Abordagem escolhida: manter `loading` como flag única que só vira `false` depois de:
+  - `getSession()` resolver, e
+  - se houver `user`, `fetchRoles(user.id)` resolver.
+- No `onAuthStateChange`: setar `loading=true` ao entrar, aguardar `fetchRoles` (quando há sessão) e então `loading=false`. Continuar usando microtask (`queueMicrotask` ou `setTimeout 0`) só para evitar deadlock dentro do callback do Supabase, mas sem liberar `loading` antes do fetch.
 
-## Mudanças no código
-
-**`supabase/functions/public-report/index.ts`**
-- Extrair a lógica de pareamento (`pairedSessions`) em uma função reutilizável `pairSessionsToRespondents(sessions, respondents, window)`.
-- Aplicá-la para cada um dos 3 buckets de líder, gerando um `Set<number>` de sessões pareadas por bucket.
-- Trocar o filtro dos buckets de líder para usar `pairedSessions.has(new Date(r.submitted_at).getTime())` em vez de contar todas as sessões.
-- Adicionar campo `respondent_total` (denominador) em cada categoria:
-  - Organizacional: total de `respondents.status='responded'`
-  - Cid / Alexandre: mesmo total (23)
-  - Líder de Área: count de respondents cujo `department_leadership` (ou campo equivalente) não é nem "Cid Lauro Vale Junior" nem "Alexandre Daguano"
-- Aplicar a mesma correção por pergunta dentro de cada bucket (para que "respondent_count" das perguntas reflita pessoas, não sessões).
-
-**`src/pages/PublicReport.tsx`**
-- Atualizar o pill da categoria e o header da CategoryView para mostrar formato "X de Y" (ex.: "21 de 23") usando o novo campo `respondent_total`.
+### Consumidores
+- `src/pages/admin/AdminIndex.tsx` e `src/components/RequireAuth.tsx` já consultam `loading` — ficam corretos automaticamente. Nenhuma mudança necessária além de confirmar que não há outra checagem de role sem respeitar `loading`.
 
 ## Validação
-
-Após o deploy, abrir `/relatorio/tectaris` e conferir:
-- Organizacional: 23 de 23
-- Líder de Área: 13 de 15
-- Cid: 19 de 23
-- Alexandre: 21 de 23
+- Logar como super_admin → ir direto para `/admin/companies` sem flash de **Sem acesso**.
+- Logar como company_admin → ir direto para `/admin/dashboard`.
+- Usuário sem role → ver **Sem acesso** de forma estável (sem alternância).
