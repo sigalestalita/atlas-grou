@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
     const { data: questions } = await supabase
       .from("survey_questions")
-      .select("id, section_id, text, question_type, sort_order")
+      .select("id, section_id, text, question_type, scale_type, sort_order")
       .in("section_id", (sections ?? []).map((s: any) => s.id))
       .order("sort_order");
 
