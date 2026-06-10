@@ -411,6 +411,9 @@ function ScaleDistribution({ distribution, scaleLabels }: { distribution: Distri
       })}
     </div>
   );
+}
+
+
 
 function EnpsView({ q }: { q: Question }) {
   const e = q.enps!;
