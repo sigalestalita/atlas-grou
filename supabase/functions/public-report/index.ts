@@ -313,7 +313,9 @@ Deno.serve(async (req) => {
         questions: orgQuestions,
         baseFilter: (r) => !r.evaluated_leader,
         denominatorMode: "total",
+        keepAllComments: true,
       }),
+
       buildBucket({
         key: "lider-area",
         label: "Líder de Área",
