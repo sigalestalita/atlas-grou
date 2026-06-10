@@ -375,6 +375,43 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
   );
 }
 
+function ScaleDistribution({ distribution, scaleLabels }: { distribution: Distribution[]; scaleLabels?: string[] }) {
+  return (
+    <div className="space-y-2.5">
+      {distribution.slice().reverse().map((d) => {
+        const label = scaleLabels?.[d.value - 1];
+        const color = SCORE_COLORS[d.value] ?? "hsl(var(--primary))";
+        return (
+          <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
+            <div className="flex items-center gap-2 w-44">
+              <div
+                className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
+                style={{ backgroundColor: color }}
+              >
+                {d.value}
+              </div>
+              {label && (
+                <span className="text-xs text-muted-foreground truncate" title={label}>
+                  {label}
+                </span>
+              )}
+            </div>
+            <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${d.percent}%`, backgroundColor: color }}
+              />
+            </div>
+            <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
+              <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
+              <span className="text-xs text-muted-foreground">({d.count})</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
 function EnpsView({ q }: { q: Question }) {
   const e = q.enps!;
   const dist = q.distribution ?? [];
