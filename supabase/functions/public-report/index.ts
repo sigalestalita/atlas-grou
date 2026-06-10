@@ -280,8 +280,8 @@ Deno.serve(async (req) => {
         "lider-area": { count: 13, total: 15 },
       },
       "b0000000-0000-0000-0000-000000000001": {
-        organizacional: { total: 7 },
-        lider: { total: 7 },
+        organizacional: { total: 9 },
+        lider: { total: 9 },
       },
     };
 
