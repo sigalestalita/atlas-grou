@@ -229,7 +229,9 @@ Deno.serve(async (req) => {
       baseFilter: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
       groupCommentsByLeader?: boolean;
+      keepAllComments?: boolean;
     };
+
 
 
     // Overrides manuais por survey: corrigem contagens quando o pareamento
