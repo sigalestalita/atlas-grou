@@ -141,30 +141,37 @@ Deno.serve(async (req) => {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const STOPWORDS = new Set(["sem comentarios", "e", "."]);
 
-    const buildQuestionStats = (q: any, rs: any[], groupByLeader = false) => {
+    const buildQuestionStats = (q: any, rs: any[], groupByLeader = false, keepAllComments = false) => {
       // Respondent count por pergunta = sessões distintas (já filtradas para pareadas no bucket)
       const respondent_count = new Set(rs.map((r) => new Date(r.submitted_at).toISOString())).size;
       if (q.question_type === "text") {
         const rawItems = rs
           .map((r) => ({ text: (r.text_value ?? "").trim(), leader: (r.evaluated_leader ?? "").trim() }))
           .filter((it) => it.text.length > 0);
-        const rawSeen = new Set<string>();
+        let comments: string[];
+        let itemsKept: { text: string; leader: string }[];
         let duplicates_removed = 0;
-        for (const it of rawItems) {
-          const key = normalize(it.text);
-          if (rawSeen.has(key)) { duplicates_removed++; continue; }
-          rawSeen.add(key);
-        }
-        const seen = new Set<string>();
-        const comments: string[] = [];
-        const itemsKept: { text: string; leader: string }[] = [];
-        for (const it of rawItems) {
-          const key = normalize(it.text);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          if (STOPWORDS.has(key)) continue;
-          comments.push(it.text);
-          itemsKept.push(it);
+        if (keepAllComments) {
+          comments = rawItems.map((it) => it.text);
+          itemsKept = rawItems;
+        } else {
+          const rawSeen = new Set<string>();
+          for (const it of rawItems) {
+            const key = normalize(it.text);
+            if (rawSeen.has(key)) { duplicates_removed++; continue; }
+            rawSeen.add(key);
+          }
+          const seen = new Set<string>();
+          comments = [];
+          itemsKept = [];
+          for (const it of rawItems) {
+            const key = normalize(it.text);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (STOPWORDS.has(key)) continue;
+            comments.push(it.text);
+            itemsKept.push(it);
+          }
         }
         const base: any = { ...q, type: "text", total: comments.length, raw_total: rawItems.length, duplicates_removed, respondent_count, comments };
         if (groupByLeader) {
@@ -180,6 +187,7 @@ Deno.serve(async (req) => {
         }
         return base;
       }
+
       const isEnps = q.scale_type === "enps";
       const scaleMin = isEnps ? 0 : survey.scale_min;
       const scaleMax = isEnps ? 10 : survey.scale_max;
@@ -221,7 +229,9 @@ Deno.serve(async (req) => {
       baseFilter: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
       groupCommentsByLeader?: boolean;
+      keepAllComments?: boolean;
     };
+
 
 
     // Overrides manuais por survey: corrigem contagens quando o pareamento
@@ -288,8 +298,9 @@ Deno.serve(async (req) => {
         respondent_count,
         respondent_total,
         questions: spec.questions.map((q) =>
-          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r)), spec.groupCommentsByLeader),
+          buildQuestionStats(q, (byQuestion.get(q.id) ?? []).filter((r) => spec.baseFilter(r) && filterActive(r)), spec.groupCommentsByLeader, spec.keepAllComments),
         ),
+
       };
     };
 
@@ -302,7 +313,9 @@ Deno.serve(async (req) => {
         questions: orgQuestions,
         baseFilter: (r) => !r.evaluated_leader,
         denominatorMode: "total",
+        keepAllComments: true,
       }),
+
       buildBucket({
         key: "lider-area",
         label: "Líder de Área",
