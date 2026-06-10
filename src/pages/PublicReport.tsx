@@ -14,6 +14,13 @@ type EnpsStats = {
   promoters_pct: number; passives_pct: number; detractors_pct: number;
   score: number;
 };
+type StatsByLeader = {
+  leader: string;
+  total: number;
+  respondent_count: number;
+  distribution: Distribution[];
+  enps?: EnpsStats;
+};
 type Question = {
   id: string;
   text: string;
@@ -29,6 +36,7 @@ type Question = {
   distribution?: Distribution[];
   comments?: string[];
   comments_by_leader?: CommentsByLeader[];
+  stats_by_leader?: StatsByLeader[];
   enps?: EnpsStats;
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
@@ -281,48 +289,41 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
       {/* Card body */}
       <div className="p-5">
         {!isText && q.distribution && (
-          q.scale_type === "enps" && q.enps ? (
+          q.stats_by_leader && q.stats_by_leader.length > 0 ? (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
+                    Geral
+                  </span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">{q.total}</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                {q.scale_type === "enps" && q.enps
+                  ? <EnpsView q={q} />
+                  : <ScaleDistribution distribution={q.distribution} scaleLabels={scaleLabels} />}
+              </div>
+              {q.stats_by_leader.map((g) => (
+                <div key={g.leader}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
+                      {g.leader}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-muted-foreground">{g.total}</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  {q.scale_type === "enps" && g.enps
+                    ? <EnpsView q={{ ...q, distribution: g.distribution, total: g.total, enps: g.enps }} />
+                    : <ScaleDistribution distribution={g.distribution} scaleLabels={scaleLabels} />}
+                </div>
+              ))}
+            </div>
+          ) : q.scale_type === "enps" && q.enps ? (
             <EnpsView q={q} />
           ) : (
-          <div className="space-y-2.5">
-            {q.distribution
-              .slice()
-              .reverse()
-              .map((d) => {
-                const label = scaleLabels?.[d.value - 1];
-                const color = SCORE_COLORS[d.value] ?? "hsl(var(--primary))";
-                return (
-                  <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
-                    {/* Score chip + label */}
-                    <div className="flex items-center gap-2 w-44">
-                      <div
-                        className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
-                        style={{ backgroundColor: color }}
-                      >
-                        {d.value}
-                      </div>
-                      {label && (
-                        <span className="text-xs text-muted-foreground truncate" title={label}>
-                          {label}
-                        </span>
-                      )}
-                    </div>
-                    {/* Bar */}
-                    <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${d.percent}%`, backgroundColor: color }}
-                      />
-                    </div>
-                    {/* Stats */}
-                    <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
-                      <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
-                      <span className="text-xs text-muted-foreground">({d.count})</span>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
+            <ScaleDistribution distribution={q.distribution} scaleLabels={scaleLabels} />
           )
         )}
 
@@ -373,6 +374,46 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
     </Card>
   );
 }
+
+function ScaleDistribution({ distribution, scaleLabels }: { distribution: Distribution[]; scaleLabels?: string[] }) {
+  return (
+    <div className="space-y-2.5">
+      {distribution.slice().reverse().map((d) => {
+        const label = scaleLabels?.[d.value - 1];
+        const color = SCORE_COLORS[d.value] ?? "hsl(var(--primary))";
+        return (
+          <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
+            <div className="flex items-center gap-2 w-44">
+              <div
+                className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
+                style={{ backgroundColor: color }}
+              >
+                {d.value}
+              </div>
+              {label && (
+                <span className="text-xs text-muted-foreground truncate" title={label}>
+                  {label}
+                </span>
+              )}
+            </div>
+            <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${d.percent}%`, backgroundColor: color }}
+              />
+            </div>
+            <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
+              <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
+              <span className="text-xs text-muted-foreground">({d.count})</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 
 function EnpsView({ q }: { q: Question }) {
   const e = q.enps!;
