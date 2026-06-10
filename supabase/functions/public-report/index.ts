@@ -332,41 +332,61 @@ Deno.serve(async (req) => {
 
 
 
-    const categories = [
-      buildBucket({
-        key: "organizacional",
-        label: "Organizacional",
-        questions: orgQuestions,
-        baseFilter: (r) => !r.evaluated_leader,
-        denominatorMode: "total",
-        keepAllComments: true,
-      }),
+    const isTectaris = survey.id === "1aef6816-fa1b-49bf-b974-fc996e9eff63";
 
-      buildBucket({
-        key: "lider-area",
-        label: "Líder de Área",
-        questions: leaderQuestions,
-        baseFilter: (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
-        denominatorMode: "distinct_sessions",
-        groupCommentsByLeader: true,
-      }),
-      buildBucket({
-        key: "cid",
-        label: CID,
-        questions: leaderQuestions,
-        baseFilter: (r) => r.evaluated_leader === CID,
-        denominatorMode: "total",
-        groupCommentsByLeader: true,
-      }),
-      buildBucket({
-        key: "alexandre",
-        label: ALEX,
-        questions: leaderQuestions,
-        baseFilter: (r) => r.evaluated_leader === ALEX,
-        denominatorMode: "total",
-        groupCommentsByLeader: true,
-      }),
-    ];
+    const categories = isTectaris
+      ? [
+          buildBucket({
+            key: "organizacional",
+            label: "Organizacional",
+            questions: orgQuestions,
+            baseFilter: (r) => !r.evaluated_leader,
+            denominatorMode: "total",
+            keepAllComments: true,
+          }),
+          buildBucket({
+            key: "lider-area",
+            label: "Líder de Área",
+            questions: leaderQuestions,
+            baseFilter: (r) => !!r.evaluated_leader && r.evaluated_leader !== CID && r.evaluated_leader !== ALEX,
+            denominatorMode: "distinct_sessions",
+            groupCommentsByLeader: true,
+          }),
+          buildBucket({
+            key: "cid",
+            label: CID,
+            questions: leaderQuestions,
+            baseFilter: (r) => r.evaluated_leader === CID,
+            denominatorMode: "total",
+            groupCommentsByLeader: true,
+          }),
+          buildBucket({
+            key: "alexandre",
+            label: ALEX,
+            questions: leaderQuestions,
+            baseFilter: (r) => r.evaluated_leader === ALEX,
+            denominatorMode: "total",
+            groupCommentsByLeader: true,
+          }),
+        ]
+      : [
+          buildBucket({
+            key: "organizacional",
+            label: "Organização",
+            questions: orgQuestions,
+            baseFilter: (r) => !r.evaluated_leader,
+            denominatorMode: "total",
+            keepAllComments: true,
+          }),
+          buildBucket({
+            key: "lider",
+            label: "Líder",
+            questions: leaderQuestions,
+            baseFilter: (r) => !!r.evaluated_leader,
+            denominatorMode: "distinct_sessions",
+            groupCommentsByLeader: true,
+          }),
+        ].filter((b) => b.questions.length > 0);
 
     return json({
       company,
