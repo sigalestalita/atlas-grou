@@ -191,33 +191,59 @@ Deno.serve(async (req) => {
       const isEnps = q.scale_type === "enps";
       const scaleMin = isEnps ? 0 : survey.scale_min;
       const scaleMax = isEnps ? 10 : survey.scale_max;
-      const dist: Record<number, number> = {};
-      for (let v = scaleMin; v <= scaleMax; v++) dist[v] = 0;
-      let total = 0;
-      rs.forEach((r) => {
-        if (r.value != null && dist[r.value] !== undefined) { dist[r.value]++; total++; }
-      });
-      const distribution = Object.entries(dist).map(([value, count]) => ({
-        value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
-      }));
-      const base: any = { ...q, type: "scale", scale_min: scaleMin, scale_max: scaleMax, total, respondent_count, distribution };
-      if (isEnps) {
-        let promoters = 0, passives = 0, detractors = 0;
-        rs.forEach((r) => {
-          if (r.value == null) return;
-          if (r.value >= 9) promoters++;
-          else if (r.value >= 7) passives++;
-          else detractors++;
+      const computeStats = (items: any[]) => {
+        const dist: Record<number, number> = {};
+        for (let v = scaleMin; v <= scaleMax; v++) dist[v] = 0;
+        let total = 0;
+        items.forEach((r) => {
+          if (r.value != null && dist[r.value] !== undefined) { dist[r.value]++; total++; }
         });
-        const pctP = total > 0 ? (promoters / total) * 100 : 0;
-        const pctD = total > 0 ? (detractors / total) * 100 : 0;
-        base.enps = {
-          promoters, passives, detractors,
-          promoters_pct: pctP,
-          passives_pct: total > 0 ? (passives / total) * 100 : 0,
-          detractors_pct: pctD,
-          score: Math.round(pctP - pctD),
-        };
+        const distribution = Object.entries(dist).map(([value, count]) => ({
+          value: Number(value), count, percent: total > 0 ? (count / total) * 100 : 0,
+        }));
+        let enps: any = undefined;
+        if (isEnps) {
+          let promoters = 0, passives = 0, detractors = 0;
+          items.forEach((r) => {
+            if (r.value == null) return;
+            if (r.value >= 9) promoters++;
+            else if (r.value >= 7) passives++;
+            else detractors++;
+          });
+          const pctP = total > 0 ? (promoters / total) * 100 : 0;
+          const pctD = total > 0 ? (detractors / total) * 100 : 0;
+          enps = {
+            promoters, passives, detractors,
+            promoters_pct: pctP,
+            passives_pct: total > 0 ? (passives / total) * 100 : 0,
+            detractors_pct: pctD,
+            score: Math.round(pctP - pctD),
+          };
+        }
+        return { distribution, total, enps };
+      };
+
+      const overall = computeStats(rs);
+      const base: any = {
+        ...q, type: "scale", scale_min: scaleMin, scale_max: scaleMax,
+        total: overall.total, respondent_count, distribution: overall.distribution,
+      };
+      if (overall.enps) base.enps = overall.enps;
+
+      if (groupByLeader) {
+        const byLeader = new Map<string, any[]>();
+        for (const r of rs) {
+          const leader = (r.evaluated_leader ?? "").trim() || "Sem identificação";
+          if (!byLeader.has(leader)) byLeader.set(leader, []);
+          byLeader.get(leader)!.push(r);
+        }
+        base.stats_by_leader = Array.from(byLeader.entries())
+          .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+          .map(([leader, items]) => {
+            const s = computeStats(items);
+            const respondents = new Set(items.map((r) => new Date(r.submitted_at).toISOString())).size;
+            return { leader, total: s.total, respondent_count: respondents, distribution: s.distribution, enps: s.enps };
+          });
       }
       return base;
     };
