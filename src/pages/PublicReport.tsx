@@ -14,6 +14,13 @@ type EnpsStats = {
   promoters_pct: number; passives_pct: number; detractors_pct: number;
   score: number;
 };
+type StatsByLeader = {
+  leader: string;
+  total: number;
+  respondent_count: number;
+  distribution: Distribution[];
+  enps?: EnpsStats;
+};
 type Question = {
   id: string;
   text: string;
@@ -29,6 +36,7 @@ type Question = {
   distribution?: Distribution[];
   comments?: string[];
   comments_by_leader?: CommentsByLeader[];
+  stats_by_leader?: StatsByLeader[];
   enps?: EnpsStats;
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
