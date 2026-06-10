@@ -90,6 +90,10 @@ Deno.serve(async (req) => {
       const sessions = Array.from(
         new Set(rs.map((r: any) => new Date(r.submitted_at).getTime())),
       ).sort((a, b) => a - b);
+      // Fallback: sem respondents cadastrados, tratamos cada sessão como um respondente.
+      if (respTimes.length === 0) {
+        return { paired: new Set(sessions), respondentCount: sessions.length };
+      }
       const used = new Set<number>();
       const covered = new Set<string>();
       const sortedResp = [...respTimes].sort((a, b) => b.t - a.t);
@@ -117,6 +121,7 @@ Deno.serve(async (req) => {
 
 
 
+
     // Group by question
     const byQuestion = new Map<string, any[]>();
     (responses ?? []).forEach((r: any) => {
@@ -126,15 +131,21 @@ Deno.serve(async (req) => {
 
     const sectionMap = new Map((sections ?? []).map((s: any) => [s.id, s]));
 
+    const sectionOrder = new Map((sections ?? []).map((s: any) => [s.id, s.sort_order ?? 0]));
     const orgQuestions: any[] = [];
     const leaderQuestions: any[] = [];
     (questions ?? []).forEach((q: any) => {
       const sec = sectionMap.get(q.section_id);
       if (!sec) return;
-      const item = { ...q, section_title: sec.title, section_type: sec.section_type };
+      const item = { ...q, section_title: sec.title, section_type: sec.section_type, _section_order: sec.sort_order ?? 0 };
       if (sec.section_type === "leadership") leaderQuestions.push(item);
       else orgQuestions.push(item);
     });
+    const byOrder = (a: any, b: any) =>
+      (a._section_order - b._section_order) || ((a.sort_order ?? 0) - (b.sort_order ?? 0));
+    orgQuestions.sort(byOrder);
+    leaderQuestions.sort(byOrder);
+
 
     const normalize = (t: string) =>
       t.replace(/\s+/g, " ").trim().toLowerCase()
@@ -268,7 +279,12 @@ Deno.serve(async (req) => {
         alexandre: { count: 21, total: 23 },
         "lider-area": { count: 13, total: 15 },
       },
+      "b0000000-0000-0000-0000-000000000001": {
+        organizacional: { total: 7 },
+        lider: { total: 7 },
+      },
     };
+
     const overrides = COUNT_OVERRIDES[survey.id] ?? {};
 
     // Quando há override de contagem, removemos as sessões mais próximas no tempo
