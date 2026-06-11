@@ -303,7 +303,7 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 </div>
                 {q.scale_type === "enps" && q.enps
                   ? <EnpsView q={q} />
-                  : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} />}
+                  : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />}
               </div>
               {q.stats_by_leader.map((g) => (
                 <div key={g.leader}>
@@ -317,14 +317,14 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                   </div>
                   {q.scale_type === "enps" && g.enps
                     ? <EnpsView q={{ ...q, distribution: g.distribution, total: g.total, enps: g.enps }} />
-                    : <ScaleDistribution distribution={g.distribution,} scaleLabels={isChoice ? undefined : scaleLabels} />}
+                    : <ScaleDistribution distribution={g.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />}
                 </div>
               ))}
             </div>
           ) : q.scale_type === "enps" && q.enps ? (
             <EnpsView q={q} />
           ) : (
-            <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} />
+            <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />
           )
         )}
 
@@ -376,12 +376,27 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
   );
 }
 
-function ScaleDistribution({ distribution, scaleLabels }: { distribution: Distribution[]; scaleLabels?: string[] }) {
+function ScaleDistribution({ distribution, scaleLabels, reverse = true }: { distribution: Distribution[]; scaleLabels?: string[]; reverse?: boolean }) {
+  const items = reverse ? distribution.slice().reverse() : distribution;
+  const getColor = (item: Distribution) => {
+    if (!item.label) return SCORE_COLORS[item.value] ?? "hsl(var(--primary))";
+    const normalized = item.label
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    if (normalized.includes("nao")) return "hsl(0 72% 55%)";
+    if (normalized.includes("sim")) return "hsl(145 60% 42%)";
+    if (normalized.includes("parte") || normalized.includes("talvez")) return "hsl(45 90% 55%)";
+    return SCORE_COLORS[item.value] ?? "hsl(var(--primary))";
+  };
+
   return (
     <div className="space-y-2.5">
-      {distribution.slice().reverse().map((d) => {
+      {items.map((d) => {
         const label = d.label ?? scaleLabels?.[d.value - 1];
-        const color = SCORE_COLORS[d.value] ?? "hsl(var(--primary))";
+        const color = getColor(d);
         return (
           <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
             <div className="flex items-center gap-2 w-44">
