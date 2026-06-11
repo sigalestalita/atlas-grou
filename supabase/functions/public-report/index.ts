@@ -385,24 +385,29 @@ Deno.serve(async (req) => {
             groupCommentsByLeader: true,
           }),
         ]
-      : [
-          buildBucket({
-            key: "organizacional",
-            label: "Organização",
-            questions: orgQuestions,
-            baseFilter: (r) => !r.evaluated_leader,
-            denominatorMode: "total",
-            keepAllComments: true,
-          }),
-          buildBucket({
-            key: "lider",
-            label: "Líder",
-            questions: leaderQuestions,
-            baseFilter: (r) => !!r.evaluated_leader,
-            denominatorMode: "distinct_sessions",
-            groupCommentsByLeader: true,
-          }),
-        ].filter((b) => b.questions.length > 0);
+      : (() => {
+          // Comentários (perguntas de texto) devem aparecer em ambas as abas
+          const orgTextQuestions = orgQuestions.filter((q) => q.question_type === "text");
+          const leaderTextQuestions = leaderQuestions.filter((q) => q.question_type === "text");
+          return [
+            buildBucket({
+              key: "organizacional",
+              label: "Organização",
+              questions: [...orgQuestions, ...leaderTextQuestions],
+              baseFilter: (r) => !r.evaluated_leader || (leaderTextQuestions.some((q) => q.id === r.question_id)),
+              denominatorMode: "total",
+              keepAllComments: true,
+            }),
+            buildBucket({
+              key: "lider",
+              label: "Líder",
+              questions: [...leaderQuestions, ...orgTextQuestions],
+              baseFilter: (r) => !!r.evaluated_leader || (orgTextQuestions.some((q) => q.id === r.question_id)),
+              denominatorMode: "distinct_sessions",
+              groupCommentsByLeader: true,
+            }),
+          ].filter((b) => b.questions.length > 0);
+        })();
 
     return json({
       company,
