@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
     const { data: questions } = await supabase
       .from("survey_questions")
-      .select("id, section_id, text, question_type, scale_type, sort_order")
+      .select("id, section_id, text, question_type, scale_type, sort_order, options")
       .in("section_id", (sections ?? []).map((s: any) => s.id))
       .order("sort_order");
 
@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
       // Respondent count por pergunta = sessões distintas (já filtradas para pareadas no bucket)
       const respondent_count = new Set(rs.map((r) => new Date(r.submitted_at).toISOString())).size;
       const isTextQuestion = q.question_type === "text" || q.question_type === "open_text";
+      const isChoiceQuestion = q.question_type === "choice";
       if (isTextQuestion) {
         const rawItems = rs
           .map((r) => ({ text: (r.text_value ?? "").trim(), leader: (r.evaluated_leader ?? "").trim() }))
@@ -197,6 +198,68 @@ Deno.serve(async (req) => {
             .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
             .map(([leader, comments]) => ({ leader, comments }));
         }
+        return base;
+      }
+
+      if (isChoiceQuestion) {
+        const parseChoice = (raw: unknown) => {
+          const source = typeof raw === "string" ? raw : "";
+          const [choice] = source.split("|||");
+          return choice.trim();
+        };
+
+        const rawOptions = Array.isArray(q.options) ? q.options.map((o: unknown) => String(o).trim()).filter(Boolean) : [];
+        const discoveredOptions = Array.from(new Set(rs.map((r) => parseChoice(r.text_value)).filter(Boolean)));
+        const options = Array.from(new Set([...rawOptions, ...discoveredOptions]));
+
+        const computeChoiceStats = (items: any[]) => {
+          const counts = new Map<string, number>();
+          options.forEach((option) => counts.set(option, 0));
+          let total = 0;
+
+          items.forEach((r) => {
+            const choice = parseChoice(r.text_value);
+            if (!choice) return;
+            counts.set(choice, (counts.get(choice) ?? 0) + 1);
+            total++;
+          });
+
+          const distribution = options.map((option, idx) => ({
+            value: idx + 1,
+            label: option,
+            count: counts.get(option) ?? 0,
+            percent: total > 0 ? ((counts.get(option) ?? 0) / total) * 100 : 0,
+          }));
+
+          return { distribution, total };
+        };
+
+        const overall = computeChoiceStats(rs);
+        const base: any = {
+          ...q,
+          type: "choice",
+          total: overall.total,
+          respondent_count,
+          distribution: overall.distribution,
+          options,
+        };
+
+        if (groupByLeader) {
+          const byLeader = new Map<string, any[]>();
+          for (const r of rs) {
+            const leader = (r.evaluated_leader ?? "").trim() || "Sem identificação";
+            if (!byLeader.has(leader)) byLeader.set(leader, []);
+            byLeader.get(leader)!.push(r);
+          }
+          base.stats_by_leader = Array.from(byLeader.entries())
+            .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+            .map(([leader, items]) => {
+              const s = computeChoiceStats(items);
+              const respondents = new Set(items.map((r) => new Date(r.submitted_at).toISOString())).size;
+              return { leader, total: s.total, respondent_count: respondents, distribution: s.distribution };
+            });
+        }
+
         return base;
       }
 
