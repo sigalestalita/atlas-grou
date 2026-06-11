@@ -155,7 +155,8 @@ Deno.serve(async (req) => {
     const buildQuestionStats = (q: any, rs: any[], groupByLeader = false, keepAllComments = false) => {
       // Respondent count por pergunta = sessões distintas (já filtradas para pareadas no bucket)
       const respondent_count = new Set(rs.map((r) => new Date(r.submitted_at).toISOString())).size;
-      if (q.question_type === "text") {
+      const isTextQuestion = q.question_type === "text" || q.question_type === "open_text";
+      if (isTextQuestion) {
         const rawItems = rs
           .map((r) => ({ text: (r.text_value ?? "").trim(), leader: (r.evaluated_leader ?? "").trim() }))
           .filter((it) => it.text.length > 0);
@@ -387,8 +388,9 @@ Deno.serve(async (req) => {
         ]
       : (() => {
           // Comentários (perguntas de texto) devem aparecer em ambas as abas
-          const orgTextQuestions = orgQuestions.filter((q) => q.question_type === "text");
-          const leaderTextQuestions = leaderQuestions.filter((q) => q.question_type === "text");
+          const isTextQuestion = (q: any) => q.question_type === "text" || q.question_type === "open_text";
+          const orgTextQuestions = orgQuestions.filter(isTextQuestion);
+          const leaderTextQuestions = leaderQuestions.filter(isTextQuestion);
           return [
             buildBucket({
               key: "organizacional",
