@@ -7,7 +7,7 @@ import { IntroSplash } from "@/components/IntroSplash";
 import grouLogo from "@/assets/grou-logo.png";
 import introBg from "@/assets/intro-bg.png";
 
-type Distribution = { value: number; count: number; percent: number };
+type Distribution = { value: number; count: number; percent: number; label?: string };
 type CommentsByLeader = { leader: string; comments: string[] };
 type EnpsStats = {
   promoters: number; passives: number; detractors: number;
@@ -25,7 +25,7 @@ type Question = {
   id: string;
   text: string;
   section_title: string;
-  type: "scale" | "text";
+  type: "scale" | "text" | "choice";
   scale_type?: string;
   scale_min?: number;
   scale_max?: number;
@@ -274,6 +274,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
 
 function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; scaleLabels?: string[] }) {
   const isText = q.type === "text";
+  const isChoice = q.type === "choice";
   return (
     <Card className="overflow-hidden">
       {/* Card header */}
@@ -302,7 +303,7 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 </div>
                 {q.scale_type === "enps" && q.enps
                   ? <EnpsView q={q} />
-                  : <ScaleDistribution distribution={q.distribution} scaleLabels={scaleLabels} />}
+                  : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} />}
               </div>
               {q.stats_by_leader.map((g) => (
                 <div key={g.leader}>
@@ -316,14 +317,14 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                   </div>
                   {q.scale_type === "enps" && g.enps
                     ? <EnpsView q={{ ...q, distribution: g.distribution, total: g.total, enps: g.enps }} />
-                    : <ScaleDistribution distribution={g.distribution} scaleLabels={scaleLabels} />}
+                    : <ScaleDistribution distribution={g.distribution,} scaleLabels={isChoice ? undefined : scaleLabels} />}
                 </div>
               ))}
             </div>
           ) : q.scale_type === "enps" && q.enps ? (
             <EnpsView q={q} />
           ) : (
-            <ScaleDistribution distribution={q.distribution} scaleLabels={scaleLabels} />
+            <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} />
           )
         )}
 
@@ -379,7 +380,7 @@ function ScaleDistribution({ distribution, scaleLabels }: { distribution: Distri
   return (
     <div className="space-y-2.5">
       {distribution.slice().reverse().map((d) => {
-        const label = scaleLabels?.[d.value - 1];
+        const label = d.label ?? scaleLabels?.[d.value - 1];
         const color = SCORE_COLORS[d.value] ?? "hsl(var(--primary))";
         return (
           <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
