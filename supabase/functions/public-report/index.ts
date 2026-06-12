@@ -328,6 +328,9 @@ Deno.serve(async (req) => {
       label: string;
       questions: any[];
       baseFilter: (r: any) => boolean;
+      // Filtro usado SOMENTE para contagem de respondentes (ex.: ignora
+      // perguntas de texto importadas da outra aba, que duplicariam sessões).
+      countFilter?: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
       groupCommentsByLeader?: boolean;
       keepAllComments?: boolean;
