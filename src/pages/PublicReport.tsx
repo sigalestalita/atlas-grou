@@ -320,6 +320,7 @@ function AverageByQuestion({ questions }: { questions: Question[] }) {
   );
 }
 
+function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; scaleLabels?: string[] }) {
 
   const isText = q.type === "text";
   const isChoice = q.type === "choice";
