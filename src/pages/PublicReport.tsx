@@ -406,15 +406,30 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 </div>
               ))
             ) : q.comments && q.comments.length > 0 ? (
-              q.comments.map((c, i) => (
-                <blockquote
-                  key={i}
-                  className="relative pl-4 pr-3 py-3 bg-muted/40 rounded-lg border-l-4 border-primary text-sm leading-relaxed whitespace-pre-wrap"
-                >
-                  <span className="text-muted-foreground/60 absolute left-1.5 top-1 text-base leading-none">"</span>
-                  {c}
-                </blockquote>
-              ))
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
+                    Comentários
+                  </span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    {q.comments.length}
+                  </span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <div className="space-y-2.5">
+                  {q.comments.map((c, i) => (
+                    <blockquote
+                      key={i}
+                      className="relative pl-4 pr-3 py-3 bg-muted/40 rounded-lg border-l-4 border-primary text-sm leading-relaxed whitespace-pre-wrap"
+                    >
+                      <span className="text-muted-foreground/60 absolute left-1.5 top-1 text-base leading-none">"</span>
+                      {c}
+                    </blockquote>
+                  ))}
+                </div>
+              </div>
+            )
             ) : (
               <p className="text-sm text-muted-foreground italic text-center py-6">Sem comentários nesta categoria.</p>
             )}
