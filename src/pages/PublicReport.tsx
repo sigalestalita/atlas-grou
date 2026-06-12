@@ -429,7 +429,6 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                   ))}
                 </div>
               </div>
-            )
             ) : (
               <p className="text-sm text-muted-foreground italic text-center py-6">Sem comentários nesta categoria.</p>
             )}
