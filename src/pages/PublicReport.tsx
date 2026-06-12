@@ -251,6 +251,10 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
         </div>
       </div>
 
+      <AverageByQuestion questions={category.questions} />
+
+
+
       {grouped.map(([sectionTitle, qs]) => (
         <section key={sectionTitle} className="space-y-4">
           <div className="flex items-center gap-3 sticky top-0 bg-muted/30 backdrop-blur z-10 py-2">
