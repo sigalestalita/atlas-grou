@@ -328,6 +328,9 @@ Deno.serve(async (req) => {
       label: string;
       questions: any[];
       baseFilter: (r: any) => boolean;
+      // Filtro usado SOMENTE para contagem de respondentes (ex.: ignora
+      // perguntas de texto importadas da outra aba, que duplicariam sessões).
+      countFilter?: (r: any) => boolean;
       denominatorMode: "total" | "distinct_sessions";
       groupCommentsByLeader?: boolean;
       keepAllComments?: boolean;
@@ -370,18 +373,23 @@ Deno.serve(async (req) => {
 
     const buildBucket = (spec: BucketSpec) => {
       const bucketResponses = (responses ?? []).filter(spec.baseFilter);
+      const countResponses = spec.countFilter
+        ? bucketResponses.filter(spec.countFilter)
+        : bucketResponses;
       const { paired, respondentCount } = pairSessions(bucketResponses);
       let activeSessions: Set<number> = paired;
       const filterActive = (r: any) => activeSessions.has(new Date(r.submitted_at).getTime());
 
-      let respondent_count = respondentCount;
+      let respondent_count = spec.countFilter
+        ? pairSessions(countResponses).respondentCount
+        : respondentCount;
 
       let respondent_total: number;
       if (spec.denominatorMode === "total") {
         respondent_total = totalRespondents;
       } else {
         respondent_total = new Set(
-          bucketResponses.map((r) => new Date(r.submitted_at).getTime()),
+          countResponses.map((r) => new Date(r.submitted_at).getTime()),
         ).size;
         if (respondent_total < respondent_count) respondent_total = respondent_count;
       }
@@ -460,6 +468,7 @@ Deno.serve(async (req) => {
               label: "Organização",
               questions: [...orgQuestions, ...leaderTextQuestions],
               baseFilter: (r) => !r.evaluated_leader || (leaderTextQuestions.some((q) => q.id === r.question_id)),
+              countFilter: (r) => !r.evaluated_leader,
               denominatorMode: "total",
               keepAllComments: true,
             }),
@@ -468,6 +477,7 @@ Deno.serve(async (req) => {
               label: "Líder",
               questions: [...leaderQuestions, ...orgTextQuestions],
               baseFilter: (r) => !!r.evaluated_leader || (orgTextQuestions.some((q) => q.id === r.question_id)),
+              countFilter: (r) => !!r.evaluated_leader,
               denominatorMode: "distinct_sessions",
               groupCommentsByLeader: true,
             }),
