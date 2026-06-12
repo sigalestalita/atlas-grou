@@ -276,7 +276,51 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   );
 }
 
-function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; scaleLabels?: string[] }) {
+function AverageByQuestion({ questions }: { questions: Question[] }) {
+  const items = useMemo(() => {
+    return questions
+      .filter((q) => q.type === "scale" && q.distribution && q.distribution.length > 0 && q.scale_type !== "enps")
+      .map((q) => {
+        let sum = 0, n = 0;
+        q.distribution!.forEach((d) => { sum += d.value * d.count; n += d.count; });
+        const mean = n > 0 ? sum / n : 0;
+        const max = q.scale_max ?? 5;
+        const min = q.scale_min ?? 1;
+        const pct = max > min ? ((mean - min) / (max - min)) * 100 : 0;
+        return { id: q.id, text: q.text, mean, pct, max, n };
+      })
+      .filter((it) => it.n > 0);
+  }, [questions]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-2xl font-bold font-display">Média por Pergunta</h3>
+        <p className="text-sm text-muted-foreground">Média de cada pergunta da pesquisa</p>
+      </div>
+      <Card className="p-5">
+        <div className="space-y-2">
+          {items.map((it) => {
+            const color = it.mean >= 4 ? "hsl(160 70% 40%)" : "hsl(40 90% 55%)";
+            return (
+              <div key={it.id} className="grid grid-cols-[minmax(0,18rem)_1fr_auto] items-center gap-3 text-sm">
+                <div className="truncate text-muted-foreground" title={it.text}>{it.text}</div>
+                <div className="h-4 bg-muted rounded">
+                  <div className="h-full rounded transition-all duration-500" style={{ width: `${it.pct}%`, backgroundColor: color }} />
+                </div>
+                <div className="tabular-nums font-mono text-xs w-12 text-right">{it.mean.toFixed(2)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+
   const isText = q.type === "text";
   const isChoice = q.type === "choice";
   return (
