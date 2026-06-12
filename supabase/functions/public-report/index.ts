@@ -373,18 +373,23 @@ Deno.serve(async (req) => {
 
     const buildBucket = (spec: BucketSpec) => {
       const bucketResponses = (responses ?? []).filter(spec.baseFilter);
+      const countResponses = spec.countFilter
+        ? bucketResponses.filter(spec.countFilter)
+        : bucketResponses;
       const { paired, respondentCount } = pairSessions(bucketResponses);
       let activeSessions: Set<number> = paired;
       const filterActive = (r: any) => activeSessions.has(new Date(r.submitted_at).getTime());
 
-      let respondent_count = respondentCount;
+      let respondent_count = spec.countFilter
+        ? pairSessions(countResponses).respondentCount
+        : respondentCount;
 
       let respondent_total: number;
       if (spec.denominatorMode === "total") {
         respondent_total = totalRespondents;
       } else {
         respondent_total = new Set(
-          bucketResponses.map((r) => new Date(r.submitted_at).getTime()),
+          countResponses.map((r) => new Date(r.submitted_at).getTime()),
         ).size;
         if (respondent_total < respondent_count) respondent_total = respondent_count;
       }
