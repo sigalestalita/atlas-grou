@@ -277,6 +277,7 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
 }
 
 function AverageByQuestion({ questions }: { questions: Question[] }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const items = useMemo(() => {
     return questions
       .filter((q) => q.type === "scale" && q.distribution && q.distribution.length > 0 && q.scale_type !== "enps")
@@ -298,20 +299,30 @@ function AverageByQuestion({ questions }: { questions: Question[] }) {
     <section className="space-y-4">
       <div>
         <h3 className="text-2xl font-bold font-display">Média por Pergunta</h3>
-        <p className="text-sm text-muted-foreground">Média de cada pergunta da pesquisa</p>
+        <p className="text-sm text-muted-foreground">Média de cada pergunta da pesquisa. Clique para ver a pergunta completa.</p>
       </div>
       <Card className="p-5">
         <div className="space-y-2">
           {items.map((it) => {
             const color = it.mean >= 4 ? "hsl(160 70% 40%)" : "hsl(40 90% 55%)";
+            const isOpen = !!expanded[it.id];
             return (
-              <div key={it.id} className="grid grid-cols-[minmax(0,18rem)_1fr_auto] items-center gap-3 text-sm">
-                <div className="truncate text-muted-foreground" title={it.text}>{it.text}</div>
+              <button
+                type="button"
+                key={it.id}
+                onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}
+                className="w-full grid grid-cols-[minmax(0,18rem)_1fr_auto] items-center gap-3 text-sm text-left rounded-md px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                aria-expanded={isOpen}
+                title={isOpen ? "Recolher" : "Expandir"}
+              >
+                <div className={`text-muted-foreground ${isOpen ? "whitespace-normal break-words" : "truncate"}`}>
+                  {it.text}
+                </div>
                 <div className="h-4 bg-muted rounded">
                   <div className="h-full rounded transition-all duration-500" style={{ width: `${it.pct}%`, backgroundColor: color }} />
                 </div>
                 <div className="tabular-nums font-mono text-xs w-12 text-right">{it.mean.toFixed(2)}</div>
-              </div>
+              </button>
             );
           })}
         </div>
