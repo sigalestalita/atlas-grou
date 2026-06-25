@@ -266,6 +266,16 @@ Deno.serve(async (req) => {
       const isEnps = q.scale_type === "enps";
       const scaleMin = isEnps ? 0 : survey.scale_min;
       const scaleMax = isEnps ? 10 : survey.scale_max;
+      const SCALE_LABELS_BY_TYPE: Record<string, string[]> = {
+        concordancia: ["Discordo Totalmente", "Discordo", "Neutro", "Concordo", "Concordo Totalmente"],
+        avaliacao: ["Péssimo", "Ruim", "Regular", "Bom", "Ótimo"],
+        frequencia: ["Nunca", "Raramente", "Às vezes", "Frequentemente", "Sempre"],
+        satisfacao: ["Muito insatisfeito", "Insatisfeito", "Neutro", "Satisfeito", "Muito satisfeito"],
+        confianca: ["Muito baixo", "Baixo", "Médio", "Alto", "Muito alto"],
+      };
+      const perQuestionLabels = !isEnps && q.scale_type && SCALE_LABELS_BY_TYPE[q.scale_type]
+        ? SCALE_LABELS_BY_TYPE[q.scale_type]
+        : undefined;
       const computeStats = (items: any[]) => {
         const dist: Record<number, number> = {};
         for (let v = scaleMin; v <= scaleMax; v++) dist[v] = 0;
