@@ -38,6 +38,7 @@ type Question = {
   comments_by_leader?: CommentsByLeader[];
   stats_by_leader?: StatsByLeader[];
   enps?: EnpsStats;
+  scale_labels?: string[];
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
 type ReportData = {
@@ -363,7 +364,7 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                 </div>
                 {q.scale_type === "enps" && q.enps
                   ? <EnpsView q={q} />
-                  : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />}
+                  : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : (q.scale_labels ?? scaleLabels)} reverse={!isChoice} />}
               </div>
               {q.stats_by_leader.map((g) => (
                 <div key={g.leader}>
@@ -377,14 +378,14 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
                   </div>
                   {q.scale_type === "enps" && g.enps
                     ? <EnpsView q={{ ...q, distribution: g.distribution, total: g.total, enps: g.enps }} />
-                    : <ScaleDistribution distribution={g.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />}
+                    : <ScaleDistribution distribution={g.distribution} scaleLabels={isChoice ? undefined : (q.scale_labels ?? scaleLabels)} reverse={!isChoice} />}
                 </div>
               ))}
             </div>
           ) : q.scale_type === "enps" && q.enps ? (
             <EnpsView q={q} />
           ) : (
-            <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : scaleLabels} reverse={!isChoice} />
+            <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : (q.scale_labels ?? scaleLabels)} reverse={!isChoice} />
           )
         )}
 
