@@ -313,6 +313,7 @@ Deno.serve(async (req) => {
         ...q, type: "scale", scale_min: scaleMin, scale_max: scaleMax,
         total: overall.total, respondent_count, distribution: overall.distribution,
       };
+      if (perQuestionLabels) base.scale_labels = perQuestionLabels;
       if (overall.enps) base.enps = overall.enps;
 
       if (groupByLeader) {
