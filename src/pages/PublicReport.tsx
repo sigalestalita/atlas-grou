@@ -38,6 +38,7 @@ type Question = {
   comments_by_leader?: CommentsByLeader[];
   stats_by_leader?: StatsByLeader[];
   enps?: EnpsStats;
+  scale_labels?: string[];
 };
 type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
 type ReportData = {
