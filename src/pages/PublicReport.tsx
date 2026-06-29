@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquareQuote, BarChart3 } from "lucide-react";
+import { MessageSquareQuote, BarChart3, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { IntroSplash } from "@/components/IntroSplash";
 import grouLogo from "@/assets/grou-logo.png";
 import introBg from "@/assets/intro-bg.png";
+import { exportReportToCSV } from "@/lib/exportReportCsv";
 
 type Distribution = { value: number; count: number; percent: number; label?: string };
 type CommentsByLeader = { leader: string; comments: string[] };
@@ -145,13 +147,24 @@ export default function PublicReport() {
                 />
               )}
             </div>
-            <div className="text-left md:text-right">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
-                Pesquisa de Clima · Relatório
-              </p>
-              <p className="mt-0.5 text-sm font-semibold text-white md:text-base">
-                {data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
-              </p>
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="text-left md:text-right">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+                  Pesquisa de Clima · Relatório
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-white md:text-base">
+                  {data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => exportReportToCSV(data)}
+                className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                <Download className="h-4 w-4" />
+                Exportar CSV
+              </Button>
             </div>
           </div>
         </header>
