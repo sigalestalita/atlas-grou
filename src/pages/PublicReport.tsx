@@ -67,20 +67,38 @@ export default function PublicReport() {
   // Support both /relatorio/:slug and /result-<slug> (via /:resultSlug)
   const slug = params.slug
     ?? (params.resultSlug?.startsWith("result-") ? params.resultSlug.slice("result-".length) : undefined);
+  const storageKey = `report_access_code:${slug ?? ""}`;
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [accessCode, setAccessCode] = useState<string>(() => localStorage.getItem(`report_access_code:${slug ?? ""}`) ?? "");
+  const [needsCode, setNeedsCode] = useState(false);
+  const [codeInvalid, setCodeInvalid] = useState(false);
+  const [gateCompany, setGateCompany] = useState<{ name?: string; logo_url?: string }>({});
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
+        const codeParam = accessCode ? `&code=${encodeURIComponent(accessCode)}` : "";
         const res = await fetch(
-          `${SUPABASE_URL}/functions/v1/public-report?slug=${encodeURIComponent(slug ?? "")}`,
+          `${SUPABASE_URL}/functions/v1/public-report?slug=${encodeURIComponent(slug ?? "")}${codeParam}`,
           { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } },
         );
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Erro ao carregar");
+        if (!res.ok) {
+          if (json.code_required) {
+            setGateCompany(json.company ?? {});
+            setNeedsCode(true);
+            setCodeInvalid(json.error === "code_invalid");
+            if (json.error === "code_invalid") localStorage.removeItem(storageKey);
+            return;
+          }
+          throw new Error(json.error || "Erro ao carregar");
+        }
+        setNeedsCode(false);
+        if (accessCode) localStorage.setItem(storageKey, accessCode);
         setData(json);
         setActiveCategory(json.categories[0]?.key ?? "");
       } catch (e: any) {
@@ -89,11 +107,24 @@ export default function PublicReport() {
         setLoading(false);
       }
     })();
-  }, [slug]);
+  }, [slug, accessCode]);
 
+  if (needsCode)
+    return (
+      <ReportAccessGate
+        companyName={gateCompany.name}
+        companyLogoUrl={gateCompany.name && /grou/i.test(gateCompany.name) ? undefined : gateCompany.logo_url}
+        invalid={codeInvalid}
+        onSubmit={(code) => {
+          setCodeInvalid(false);
+          setAccessCode(code);
+        }}
+      />
+    );
   if (loading) return <div className="p-12 text-center text-muted-foreground">Carregando relatório...</div>;
   if (error) return <div className="p-12 text-center text-destructive">{error}</div>;
   if (!data) return null;
+
 
   const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
   const isGrouCompany = /grou/i.test(data.company.name);
