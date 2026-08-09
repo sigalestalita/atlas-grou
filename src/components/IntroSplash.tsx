@@ -101,10 +101,13 @@ export function IntroSplash({ companyLogoUrl, companyName, title, eyebrow }: Pro
           alt="Grou"
           className="h-10 w-auto translate-y-[3px] opacity-0 brightness-0 invert drop-shadow-[0_2px_18px_rgba(0,0,0,0.6)] md:h-24 md:translate-y-[7px] animate-[introLogoLeft_900ms_ease-out_200ms_forwards]"
         />
-        <div
-          className="h-8 w-px bg-white/40 opacity-0 md:h-20 animate-[introDivider_600ms_ease-out_900ms_forwards]"
-          aria-hidden
-        />
+        {companyLogoUrl && (
+          <div
+            className="h-8 w-px bg-white/40 opacity-0 md:h-20 animate-[introDivider_600ms_ease-out_900ms_forwards]"
+            aria-hidden
+          />
+        )}
+
         {companyLogoUrl && (
           <img
             src={companyLogoUrl}
