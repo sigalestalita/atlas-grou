@@ -361,6 +361,11 @@ Deno.serve(async (req) => {
         organizacional: { total: 9 },
         lider: { total: 9 },
       },
+      // Grou (demonstração comercial)
+      "d1000000-0000-0000-0000-000000000001": {
+        organizacional: { total: 9 },
+        lider: { total: 9 },
+      },
     };
 
     const overrides = COUNT_OVERRIDES[survey.id] ?? {};
