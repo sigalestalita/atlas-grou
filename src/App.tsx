@@ -82,7 +82,9 @@ const App = () => (
                 <Route path="tracking" element={<Tracking />} />
                 <Route path="responses" element={<Responses />} />
                 <Route path="export" element={<ExportPage />} />
+                <Route path="report-access" element={<ReportAccess />} />
               </Route>
+
 
               {/* Company Admin routes */}
               <Route path="dashboard" element={<Dashboard />} />
