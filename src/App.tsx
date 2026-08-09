@@ -25,7 +25,9 @@ import Tracking from "@/pages/admin/Tracking";
 import ExportPage from "@/pages/admin/Export";
 import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
+import ReportAccess from "@/pages/admin/ReportAccess";
 import PublicReport from "@/pages/PublicReport";
+
 import NotFound from "./pages/NotFound";
 import { useParams } from "react-router-dom";
 
