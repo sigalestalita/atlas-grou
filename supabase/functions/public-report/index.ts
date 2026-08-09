@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const slug = url.searchParams.get("slug");
+    const accessCode = (url.searchParams.get("code") ?? "").trim();
     if (!slug) return json({ error: "slug required" }, 400);
 
     const supabase = createClient(
@@ -35,6 +36,36 @@ Deno.serve(async (req) => {
       .eq("slug", slug)
       .maybeSingle();
     if (!company) return json({ error: "company not found" }, 404);
+
+    // ---- Acesso protegido por código (liberado pela Grou) ----
+    const { data: codes } = await supabase
+      .from("report_access_codes")
+      .select("id, code")
+      .eq("company_id", company.id)
+      .eq("is_active", true);
+
+    if ((codes ?? []).length > 0) {
+      const match = (codes ?? []).find(
+        (c: any) => String(c.code).trim().toUpperCase() === accessCode.toUpperCase(),
+      );
+      if (!accessCode) {
+        return json(
+          { error: "code_required", code_required: true, company: { name: company.name, logo_url: company.logo_url } },
+          401,
+        );
+      }
+      if (!match) {
+        return json(
+          { error: "code_invalid", code_required: true, company: { name: company.name, logo_url: company.logo_url } },
+          401,
+        );
+      }
+      await supabase
+        .from("report_access_codes")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", match.id);
+    }
+
 
     const { data: survey } = await supabase
       .from("surveys")
