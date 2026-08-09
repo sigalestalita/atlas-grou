@@ -92,6 +92,44 @@ export type Database = {
           },
         ]
       }
+      report_access_codes: {
+        Row: {
+          code: string
+          company_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string | null
+          last_used_at: string | null
+        }
+        Insert: {
+          code: string
+          company_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          last_used_at?: string | null
+        }
+        Update: {
+          code?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          last_used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_access_codes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       respondents: {
         Row: {
           company_id: string
