@@ -96,15 +96,18 @@ export default function PublicReport() {
   if (!data) return null;
 
   const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
+  const isGrouCompany = /grou/i.test(data.company.name);
+  const companyLogo = isGrouCompany ? undefined : data.company.logo_url;
 
   return (
     <>
       <IntroSplash
-        companyLogoUrl={data.company.logo_url}
+        companyLogoUrl={companyLogo}
         companyName={data.company.name}
         eyebrow="Pesquisa de Clima Organizacional"
         title={data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
       />
+
       <div className="relative min-h-screen overflow-hidden bg-[#020617] text-foreground">
         {/* Cosmic background — same vibe as IntroSplash */}
         <div aria-hidden className="pointer-events-none fixed inset-0 -z-0">
@@ -138,14 +141,17 @@ export default function PublicReport() {
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-10">
             <div className="flex items-center gap-3 md:gap-5">
               <img src={grouLogo} alt="Grou" className="h-6 w-auto brightness-0 invert md:h-7" />
-              <span className="h-5 w-px bg-white/25" />
-              {data.company.logo_url && (
-                <img
-                  src={data.company.logo_url}
-                  alt={data.company.name}
-                  className="h-8 w-auto object-contain md:h-10"
-                />
+              {companyLogo && (
+                <>
+                  <span className="h-5 w-px bg-white/25" />
+                  <img
+                    src={companyLogo}
+                    alt={data.company.name}
+                    className="h-8 w-auto object-contain md:h-10"
+                  />
+                </>
               )}
+
             </div>
             <div className="flex items-center gap-3 md:gap-4">
               <div className="text-left md:text-right">
