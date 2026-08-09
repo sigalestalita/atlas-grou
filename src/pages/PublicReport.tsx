@@ -96,15 +96,18 @@ export default function PublicReport() {
   if (!data) return null;
 
   const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
+  const isGrouCompany = /grou/i.test(data.company.name);
+  const companyLogo = isGrouCompany ? undefined : data.company.logo_url;
 
   return (
     <>
       <IntroSplash
-        companyLogoUrl={data.company.logo_url}
+        companyLogoUrl={companyLogo}
         companyName={data.company.name}
         eyebrow="Pesquisa de Clima Organizacional"
         title={data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
       />
+
       <div className="relative min-h-screen overflow-hidden bg-[#020617] text-foreground">
         {/* Cosmic background — same vibe as IntroSplash */}
         <div aria-hidden className="pointer-events-none fixed inset-0 -z-0">
