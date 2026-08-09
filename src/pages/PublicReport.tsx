@@ -141,14 +141,17 @@ export default function PublicReport() {
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-10">
             <div className="flex items-center gap-3 md:gap-5">
               <img src={grouLogo} alt="Grou" className="h-6 w-auto brightness-0 invert md:h-7" />
-              <span className="h-5 w-px bg-white/25" />
-              {data.company.logo_url && (
-                <img
-                  src={data.company.logo_url}
-                  alt={data.company.name}
-                  className="h-8 w-auto object-contain md:h-10"
-                />
+              {companyLogo && (
+                <>
+                  <span className="h-5 w-px bg-white/25" />
+                  <img
+                    src={companyLogo}
+                    alt={data.company.name}
+                    className="h-8 w-auto object-contain md:h-10"
+                  />
+                </>
               )}
+
             </div>
             <div className="flex items-center gap-3 md:gap-4">
               <div className="text-left md:text-right">
