@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { MessageSquareQuote, BarChart3, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IntroSplash } from "@/components/IntroSplash";
+import { ReportAccessGate } from "@/components/ReportAccessGate";
+
 import grouLogo from "@/assets/grou-logo.png";
 import introBg from "@/assets/intro-bg.png";
 import { exportReportToCSV } from "@/lib/exportReportCsv";
