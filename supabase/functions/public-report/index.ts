@@ -394,8 +394,7 @@ Deno.serve(async (req) => {
       },
       // Grou (demonstração comercial)
       "d1000000-0000-0000-0000-000000000001": {
-        organizacional: { total: 9 },
-        lider: { total: 9 },
+        organizacional: { count: 9, total: 9 },
       },
     };
 
