@@ -508,6 +508,7 @@ Deno.serve(async (req) => {
           const isTextQuestion = (q: any) => q.question_type === "text" || q.question_type === "open_text";
           const orgTextQuestions = orgQuestions.filter(isTextQuestion);
           const leaderTextQuestions = leaderQuestions.filter(isTextQuestion);
+          const hasLeadership = leaderQuestions.length > 0;
           return [
             buildBucket({
               key: "organizacional",
@@ -518,15 +519,19 @@ Deno.serve(async (req) => {
               denominatorMode: "total",
               keepAllComments: true,
             }),
-            buildBucket({
-              key: "lider",
-              label: "Líder",
-              questions: [...leaderQuestions, ...orgTextQuestions],
-              baseFilter: (r) => !!r.evaluated_leader || (orgTextQuestions.some((q) => q.id === r.question_id)),
-              countFilter: (r) => !!r.evaluated_leader,
-              denominatorMode: "distinct_sessions",
-              groupCommentsByLeader: true,
-            }),
+            ...(hasLeadership
+              ? [
+                  buildBucket({
+                    key: "lider",
+                    label: "Líder",
+                    questions: [...leaderQuestions, ...orgTextQuestions],
+                    baseFilter: (r) => !!r.evaluated_leader || (orgTextQuestions.some((q) => q.id === r.question_id)),
+                    countFilter: (r) => !!r.evaluated_leader,
+                    denominatorMode: "distinct_sessions",
+                    groupCommentsByLeader: true,
+                  }),
+                ]
+              : []),
           ].filter((b) => b.questions.length > 0);
         })();
 
