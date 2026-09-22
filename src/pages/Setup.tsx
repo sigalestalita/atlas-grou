@@ -1,135 +1,120 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
-import { Shield, Loader2, CheckCircle } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowRight, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { AtlasMark } from "@/components/AtlasMark";
 
+/**
+ * Criação do primeiro super admin.
+ *
+ * Quem decide se isso é permitido é a função `create-admin`, que conta os
+ * administradores com a chave de serviço e recusa quando já existe algum.
+ *
+ * A versão anterior fazia essa contagem aqui, pelo cliente anônimo — que a RLS
+ * impede de ler `user_roles`. O resultado vinha sempre zero, então a tela
+ * afirmava "nenhum administrador cadastrado" mesmo numa instalação cheia
+ * deles, e só depois de preencher tudo é que a pessoa descobria que não podia.
+ * Agora a tela não finge saber: explica que só funciona na primeira vez e
+ * deixa a função responder.
+ */
 export default function Setup() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [hasAdmin, setHasAdmin] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    checkExistingAdmins();
-  }, []);
+    if (!done) return;
+    const t = window.setTimeout(() => navigate("/login"), 2200);
+    return () => window.clearTimeout(t);
+  }, [done, navigate]);
 
-  const checkExistingAdmins = async () => {
-    const { count } = await supabase
-      .from('user_roles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'super_admin');
-    setHasAdmin((count ?? 0) > 0);
-    setChecking(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
-    if (password.length < 6) {
-      toast({ title: 'Senha deve ter pelo menos 6 caracteres', variant: 'destructive' });
+    if (!email.trim() || password.length < 8) {
+      toast({ title: "A senha precisa ter ao menos 8 caracteres", variant: "destructive" });
       return;
     }
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("create-admin", {
+      body: { email: email.trim(), password, role: "super_admin" },
+    });
+    setLoading(false);
 
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('create-admin', {
-        body: { email: email.trim(), password, role: 'super_admin' },
+    const message = error?.message ?? data?.error;
+    if (message) {
+      toast({
+        title: "Não foi possível criar",
+        description: /token|autoriza/i.test(message)
+          ? "Já existe administrador nesta instalação. Novos admins são criados por quem já tem acesso, em Administradores."
+          : message,
+        variant: "destructive",
       });
-
-      if (error) {
-        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-        setIsLoading(false);
-        return;
-      }
-
-      if (data?.error) {
-        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
-        setIsLoading(false);
-        return;
-      }
-
-      setDone(true);
-      toast({ title: 'Super Admin criado!', description: 'Agora faça login com suas credenciais.' });
-    } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+      return;
     }
-    setIsLoading(false);
+    setDone(true);
   };
-
-  if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (hasAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="py-12 text-center space-y-4">
-            <Shield className="h-12 w-12 mx-auto text-muted-foreground" />
-            <h2 className="text-xl font-bold">Setup já realizado</h2>
-            <p className="text-muted-foreground">Já existe um Super Admin configurado.</p>
-            <Button onClick={() => navigate('/login')}>Ir para Login</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="py-12 text-center space-y-4">
-            <CheckCircle className="h-12 w-12 mx-auto text-green-500" />
-            <h2 className="text-xl font-bold">Super Admin criado!</h2>
-            <p className="text-muted-foreground">Agora faça login com <strong>{email}</strong></p>
-            <Button onClick={() => navigate('/login')} className="w-full">Ir para Login</Button>
-          </CardContent>
-        </Card>
+      <div className="grid min-h-screen place-items-center bg-background px-5">
+        <div className="text-center duration-500 animate-in fade-in">
+          <CheckCircle2 className="mx-auto h-14 w-14 text-[hsl(var(--success))]" />
+          <h1 className="mt-5 text-[22px] font-semibold tracking-tight">Administrador criado</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Levando você para a tela de entrada…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0">
-        <CardHeader className="text-center space-y-4 pb-2">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center">
-            <Shield className="h-7 w-7 text-primary-foreground" />
+    <div className="grid min-h-screen place-items-center bg-background px-5 py-10">
+      <form onSubmit={submit} className="auth-card-in w-full max-w-sm">
+        <div className="mb-7 text-center">
+          <AtlasMark className="mx-auto h-10 w-10 text-primary" />
+          <h1 className="mt-5 text-[22px] font-semibold tracking-tight">Primeiro acesso</h1>
+          <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
+            Cria o administrador inicial da plataforma. Só funciona enquanto não existir nenhum —
+            depois disso, novos administradores são criados de dentro do painel.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-[13px] font-medium">E-mail</label>
+            <Input
+              id="email" type="email" autoComplete="email" autoFocus
+              className="h-11 rounded-xl"
+              placeholder="voce@empresa.com.br"
+              value={email} onChange={(e) => setEmail(e.target.value)} required
+            />
           </div>
-          <div>
-            <CardTitle className="text-2xl">Setup Inicial</CardTitle>
-            <CardDescription className="mt-1">Crie o primeiro Super Admin da plataforma</CardDescription>
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-[13px] font-medium">Senha</label>
+            <Input
+              id="password" type="password" autoComplete="new-password"
+              className="h-11 rounded-xl"
+              placeholder="ao menos 8 caracteres"
+              value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8}
+            />
           </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input type="email" placeholder="admin@grou.com.br" value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Senha</label>
-              <Input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : 'Criar Super Admin'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <Button type="submit" className="h-11 w-full rounded-xl font-semibold" disabled={loading}>
+            {loading
+              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando…</>
+              : <>Criar administrador<ArrowRight className="ml-2 h-4 w-4" /></>}
+          </Button>
+        </div>
+
+        <p className="mt-7 flex items-center justify-center gap-1.5 text-[12px] text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Esta conta enxerga todas as empresas da plataforma
+        </p>
+      </form>
     </div>
   );
 }

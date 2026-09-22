@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquareQuote, BarChart3, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { IntroSplash } from "@/components/IntroSplash";
+import {
+  AlertTriangle, ChevronDown, Download, Loader2, MessageSquareQuote,
+  Printer, ShieldCheck, Trophy,
+} from "lucide-react";
 import { ReportAccessGate } from "@/components/ReportAccessGate";
-
-import grouLogo from "@/assets/grou-logo.png";
-import introBg from "@/assets/intro-bg.png";
 import { exportReportToCSV } from "@/lib/exportReportCsv";
+import { climateBand, enpsBand, scoreColor } from "@/lib/climate";
+import { cn } from "@/lib/utils";
+
+/**
+ * Relatório que a empresa cliente recebe.
+ *
+ * É a peça que sai da plataforma para o cliente, então é white-label de ponta
+ * a ponta: logo e cores da empresa, nenhuma menção à Grou. A versão anterior
+ * trazia o logo da Grou no topo e na abertura, o que contrariava a regra do
+ * produto.
+ *
+ * Fundo claro em vez do tema escuro anterior — este relatório é lido em
+ * reunião e impresso, e página escura gasta tinta e some no projetor.
+ *
+ * Os dados vêm da função `public-report`; o contrato não mudou.
+ */
 
 type Distribution = { value: number; count: number; percent: number; label?: string };
 type CommentsByLeader = { leader: string; comments: string[] };
@@ -19,11 +33,8 @@ type EnpsStats = {
   score: number;
 };
 type StatsByLeader = {
-  leader: string;
-  total: number;
-  respondent_count: number;
-  distribution: Distribution[];
-  enps?: EnpsStats;
+  leader: string; total: number; respondent_count: number;
+  distribution: Distribution[]; enps?: EnpsStats;
 };
 type Question = {
   id: string;
@@ -34,8 +45,6 @@ type Question = {
   scale_min?: number;
   scale_max?: number;
   total: number;
-  raw_total?: number;
-  duplicates_removed?: number;
   respondent_count?: number;
   distribution?: Distribution[];
   comments?: string[];
@@ -44,7 +53,11 @@ type Question = {
   enps?: EnpsStats;
   scale_labels?: string[];
 };
-type Category = { key: string; label: string; respondent_count?: number; respondent_total?: number; questions: Question[] };
+type Category = {
+  key: string; label: string;
+  respondent_count?: number; respondent_total?: number;
+  questions: Question[];
+};
 type ReportData = {
   company: { name: string; logo_url?: string; primary_color: string; secondary_color: string };
   survey: { title: string; scale_min: number; scale_max: number };
@@ -55,26 +68,26 @@ type ReportData = {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-// Score color mapping (1=red ... 5=green)
-const SCORE_COLORS: Record<number, string> = {
-  1: "hsl(0 72% 55%)",
-  2: "hsl(20 85% 55%)",
-  3: "hsl(45 90% 55%)",
-  4: "hsl(95 55% 48%)",
-  5: "hsl(145 60% 42%)",
-};
+/** Média de uma pergunta de escala a partir da distribuição. */
+function meanOf(q: Question): { mean: number; n: number } | null {
+  if (q.type !== "scale" || !q.distribution?.length || q.scale_type === "enps") return null;
+  let sum = 0, n = 0;
+  for (const d of q.distribution) { sum += d.value * d.count; n += d.count; }
+  return n > 0 ? { mean: sum / n, n } : null;
+}
 
 export default function PublicReport() {
   const params = useParams();
-  // Support both /relatorio/:slug and /result-<slug> (via /:resultSlug)
+  // Aceita /relatorio/:slug e /result-<slug>.
   const slug = params.slug
     ?? (params.resultSlug?.startsWith("result-") ? params.resultSlug.slice("result-".length) : undefined);
   const storageKey = `report_access_code:${slug ?? ""}`;
+
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>("");
-  const [accessCode, setAccessCode] = useState<string>(() => localStorage.getItem(`report_access_code:${slug ?? ""}`) ?? "");
+  const [activeCategory, setActiveCategory] = useState("");
+  const [accessCode, setAccessCode] = useState(() => localStorage.getItem(storageKey) ?? "");
   const [needsCode, setNeedsCode] = useState(false);
   const [codeInvalid, setCodeInvalid] = useState(false);
   const [gateCompany, setGateCompany] = useState<{ name?: string; logo_url?: string }>({});
@@ -97,231 +110,350 @@ export default function PublicReport() {
             if (json.error === "code_invalid") localStorage.removeItem(storageKey);
             return;
           }
-          throw new Error(json.error || "Erro ao carregar");
+          throw new Error(json.error || "Não foi possível carregar o relatório.");
         }
         setNeedsCode(false);
         if (accessCode) localStorage.setItem(storageKey, accessCode);
         setData(json);
         setActiveCategory(json.categories[0]?.key ?? "");
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Erro ao carregar.");
       } finally {
         setLoading(false);
       }
     })();
-  }, [slug, accessCode]);
+  }, [slug, accessCode, storageKey]);
 
-  if (needsCode)
+  /** Retrato geral: score de clima e os extremos, sobre todas as categorias. */
+  const summary = useMemo(() => {
+    if (!data) return null;
+    const all = data.categories.flatMap((c) => c.questions);
+    const min = data.survey.scale_min ?? 1;
+    const max = data.survey.scale_max ?? 5;
+
+    let sum = 0, n = 0;
+    const scored: { text: string; mean: number; section: string }[] = [];
+    for (const q of all) {
+      const m = meanOf(q);
+      if (!m) continue;
+      sum += m.mean * m.n;
+      n += m.n;
+      scored.push({ text: q.text, mean: m.mean, section: q.section_title });
+    }
+    if (!n) return null;
+
+    const mean = sum / n;
+    const score = Math.round(((mean - min) / (max - min)) * 100);
+    scored.sort((a, b) => a.mean - b.mean);
+
+    const enpsQuestion = all.find((q) => q.scale_type === "enps" && q.enps);
+    const people = Math.max(0, ...data.categories.map((c) => c.respondent_count ?? 0));
+
+    return {
+      score, mean, min, max, people,
+      weak: scored.slice(0, 3),
+      strong: scored.slice(-3).reverse(),
+      enps: enpsQuestion?.enps ?? null,
+      questionCount: scored.length,
+    };
+  }, [data]);
+
+  if (needsCode) {
     return (
       <ReportAccessGate
         companyName={gateCompany.name}
-        companyLogoUrl={gateCompany.name && /grou/i.test(gateCompany.name) ? undefined : gateCompany.logo_url}
+        companyLogoUrl={gateCompany.logo_url}
         invalid={codeInvalid}
-        onSubmit={(code) => {
-          setCodeInvalid(false);
-          setAccessCode(code);
-        }}
+        onSubmit={(code) => { setCodeInvalid(false); setAccessCode(code); }}
       />
-    );
-  if (loading) return <div className="p-12 text-center text-muted-foreground">Carregando relatório...</div>;
-  if (error) return <div className="p-12 text-center text-destructive">{error}</div>;
-  if (!data) return null;
-
-
-  const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
-  const isGrouCompany = /grou/i.test(data.company.name);
-  const companyLogo = isGrouCompany ? undefined : data.company.logo_url;
-
-  return (
-    <>
-      <IntroSplash
-        companyLogoUrl={companyLogo}
-        companyName={data.company.name}
-        eyebrow="Pesquisa de Clima Organizacional"
-        title={data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
-      />
-
-      <div className="relative min-h-screen overflow-hidden bg-[#020617] text-foreground">
-        {/* Cosmic background — same vibe as IntroSplash */}
-        <div aria-hidden className="pointer-events-none fixed inset-0 -z-0">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `url(${introBg})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              opacity: 0.55,
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse at center, rgba(2,6,23,0.35) 0%, rgba(2,6,23,0.75) 55%, rgba(2,6,23,0.95) 100%)",
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(2,6,23,0.85) 0%, rgba(2,6,23,0.35) 18%, rgba(2,6,23,0.35) 82%, rgba(2,6,23,0.9) 100%)",
-            }}
-          />
-        </div>
-
-        {/* Top bar */}
-        <header className="relative z-20 border-b border-white/10 bg-[#020617]/70 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-10">
-            <div className="flex items-center gap-3 md:gap-5">
-              <img src={grouLogo} alt="Grou" className="h-6 w-auto brightness-0 invert md:h-7" />
-              {companyLogo && (
-                <>
-                  <span className="h-5 w-px bg-white/25" />
-                  <img
-                    src={companyLogo}
-                    alt={data.company.name}
-                    className="h-8 w-auto object-contain md:h-10"
-                  />
-                </>
-              )}
-
-            </div>
-            <div className="flex items-center gap-3 md:gap-4">
-              <div className="text-left md:text-right">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
-                  Pesquisa de Clima · Relatório
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-white md:text-base">
-                  {data.survey.title.replace("Pesquisa de Clima Organizacional - ", "")}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => exportReportToCSV(data)}
-                className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              >
-                <Download className="h-4 w-4" />
-                Exportar CSV
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        {/* Stage */}
-        <main className="relative z-10 mx-auto max-w-6xl px-3 py-6 md:px-10 md:py-10">
-          {/* Category pills */}
-          <nav className="mb-6 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-xl">
-            <span className="px-2 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-white/55">
-              Categorias
-            </span>
-            {data.categories.map((c) => {
-              const isActive = c.key === current.key;
-              const count = c.respondent_count ?? 0;
-              const total = c.respondent_total;
-              const display = total != null ? `${count}/${total}` : `${count}`;
-              return (
-                <button
-                  key={c.key}
-                  onClick={() => setActiveCategory(c.key)}
-                  className={`group flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold transition-all ${
-                    isActive
-                      ? "border-[#9ec5ff]/60 bg-[#9ec5ff]/15 text-white shadow-[0_0_0_3px_rgba(158,197,255,0.12)]"
-                      : "border-white/10 bg-white/5 text-white/65 hover:border-white/25 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <span className="truncate">{c.label}</span>
-                  <span
-                    className={`grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 font-mono text-[10px] tabular-nums ${
-                      isActive ? "bg-[#9ec5ff] text-[#020617]" : "bg-white/10 text-white/60"
-                    }`}
-                    title={total != null ? `${count} de ${total} respondentes` : `${count} respondentes`}
-                  >
-                    {display}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Content panel — same look as slide stage */}
-          <div
-            key={current.key}
-            className="rounded-2xl border border-white/10 bg-background p-5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] ring-1 ring-white/5 animate-[reportFadeIn_500ms_ease-out] md:p-10"
-          >
-            <CategoryView category={current} scaleLabels={data.scale_labels} />
-          </div>
-        </main>
-
-        <style>{`
-          @keyframes reportFadeIn {
-            0% { opacity: 0; transform: translateY(14px) scale(0.99); }
-            100% { opacity: 1; transform: translateY(0) scale(1); }
-          }
-        `}</style>
-      </div>
-    </>
-  );
-}
-
-function CategoryView({ category, scaleLabels }: { category: Category; scaleLabels?: string[] }) {
-  const grouped = useMemo(() => {
-    const m = new Map<string, Question[]>();
-    category.questions.forEach((q) => {
-      if (!m.has(q.section_title)) m.set(q.section_title, []);
-      m.get(q.section_title)!.push(q);
-    });
-    return Array.from(m.entries());
-  }, [category]);
-
-  if (category.questions.length === 0) {
-    return (
-      <Card className="p-12 text-center text-muted-foreground">
-        Sem respostas nesta categoria.
-      </Card>
     );
   }
 
-  const respondents = category.respondent_count ?? 0;
-  const total = category.respondent_total;
+  if (loading) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4 text-sm text-muted-foreground">Carregando o relatório…</p>
+        </div>
+      </div>
+    );
+  }
 
-  let qIdx = 0;
+  if (error) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-6">
+        <div className="max-w-md text-center">
+          <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+          <h1 className="mt-4 text-xl font-semibold">Não foi possível abrir o relatório</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const current = data.categories.find((c) => c.key === activeCategory) ?? data.categories[0];
+  const brand = {
+    "--c-primary": data.company.primary_color || "#15498D",
+    "--c-secondary": data.company.secondary_color || "#071A34",
+  } as React.CSSProperties;
+  const band = summary ? climateBand(summary.score) : null;
+
   return (
-    <div className="space-y-10">
-      {/* Category header */}
-      <div className="flex items-end justify-between pb-4 border-b">
+    <div style={brand} className="min-h-screen bg-background">
+      {/* Topo */}
+      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-md print:static print:bg-transparent">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3.5 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            {data.company.logo_url ? (
+              <img src={data.company.logo_url} alt={data.company.name} className="h-9 w-auto max-w-[180px] object-contain" />
+            ) : (
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[15px] font-bold text-white"
+                style={{ background: "var(--c-primary)" }}
+              >
+                {data.company.name[0]}
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Pesquisa de clima
+              </p>
+              <p className="truncate text-[14px] font-semibold">
+                {data.survey.title.replace(/^Pesquisa de Clima Organizacional\s*[-–]\s*/i, "")}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 print:hidden">
+            <Button variant="outline" size="sm" className="h-9 rounded-xl" onClick={() => window.print()}>
+              <Printer className="mr-2 h-4 w-4" />Imprimir
+            </Button>
+            <Button size="sm" className="h-9 rounded-xl" onClick={() => exportReportToCSV(data)}>
+              <Download className="mr-2 h-4 w-4" />CSV
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-7 md:px-8 md:py-10">
+        {/* Retrato geral */}
+        {summary && band && (
+          <section className="mb-9">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_1fr]">
+              <div
+                className="relative overflow-hidden rounded-[26px] p-6 text-white"
+                style={{ backgroundImage: "linear-gradient(135deg, var(--c-secondary) 0%, var(--c-primary) 100%)" }}
+              >
+                <div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
+                <p className="relative text-[12px] font-medium uppercase tracking-[0.14em] text-white/70">
+                  Score de clima
+                </p>
+                <p className="relative mt-2 text-[56px] font-bold leading-none tabular-nums">{summary.score}</p>
+                <p className="relative mt-1 text-[13px] text-white/70">de 100 · média {summary.mean.toFixed(2)} de {summary.max}</p>
+                <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-white/20">
+                  <div className="h-full rounded-full bg-white/90 transition-all duration-1000" style={{ width: `${summary.score}%` }} />
+                </div>
+                <p className="relative mt-4 text-[15px] font-semibold">{band.label}</p>
+                <p className="relative mt-1 text-[12.5px] leading-relaxed text-white/75">{band.meaning}</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <HighlightCard
+                  icon={Trophy} tone="good" title="O que sustenta o clima"
+                  items={summary.strong} min={summary.min} max={summary.max}
+                />
+                <HighlightCard
+                  icon={AlertTriangle} tone="low" title="Onde agir primeiro"
+                  items={summary.weak} min={summary.min} max={summary.max}
+                />
+                {summary.enps && (
+                  <div className="rounded-[22px] border border-border bg-card p-5 sm:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">eNPS</p>
+                        <p className="mt-1 text-[34px] font-bold leading-none tabular-nums"
+                          style={{ color: enpsBand(summary.enps.score).color }}>
+                          {summary.enps.score > 0 ? `+${summary.enps.score}` : summary.enps.score}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted-foreground">
+                          {enpsBand(summary.enps.score).label} · promotores menos detratores
+                        </p>
+                      </div>
+                      <div className="flex gap-5 text-center">
+                        <EnpsPart label="Promotores" hint="9–10" pct={summary.enps.promoters_pct} n={summary.enps.promoters} color="hsl(var(--climate-high))" />
+                        <EnpsPart label="Neutros" hint="7–8" pct={summary.enps.passives_pct} n={summary.enps.passives} color="hsl(var(--climate-mid))" />
+                        <EnpsPart label="Detratores" hint="0–6" pct={summary.enps.detractors_pct} n={summary.enps.detractors} color="hsl(var(--climate-critical))" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <p className="mt-4 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Respostas anônimas. Grupos pequenos demais para garantir o anonimato não aparecem separados.
+            </p>
+          </section>
+        )}
+
+        {/* Categorias */}
+        {data.categories.length > 1 && (
+          <nav className="sticky top-[62px] z-20 -mx-4 mb-7 bg-background/95 px-4 py-2.5 backdrop-blur-md print:hidden md:-mx-8 md:px-8">
+            <div className="flex flex-wrap gap-1.5">
+              {data.categories.map((c) => {
+                const on = c.key === current.key;
+                return (
+                  <button
+                    key={c.key}
+                    onClick={() => setActiveCategory(c.key)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-all",
+                      on ? "border-transparent text-white" : "border-border bg-card text-muted-foreground hover:bg-accent",
+                    )}
+                    style={on ? { background: "var(--c-primary)" } : undefined}
+                  >
+                    <span className="truncate">{c.label}</span>
+                    <span className={cn(
+                      "grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 text-[10.5px] tabular-nums",
+                      on ? "bg-white/25" : "bg-muted",
+                    )}>
+                      {c.respondent_count ?? 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
+
+        <CategoryView key={current.key} category={current} scaleLabels={data.scale_labels} survey={data.survey} />
+      </main>
+
+      <footer className="border-t border-border py-7 text-center">
+        <p className="text-[12px] text-muted-foreground">{data.company.name}</p>
+      </footer>
+
+      <style>{`
+        @media print {
+          nav, header button { display: none !important; }
+          body { background: #fff; }
+          section, article { break-inside: avoid; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function EnpsPart({ label, hint, pct, n, color }: { label: string; hint: string; pct: number; n: number; color: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="text-[19px] font-bold tabular-nums" style={{ color }}>{pct.toFixed(0)}%</p>
+      <p className="text-[10.5px] text-muted-foreground">{n} · {hint}</p>
+    </div>
+  );
+}
+
+function HighlightCard({
+  icon: Icon, tone, title, items, min, max,
+}: {
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  tone: "good" | "low";
+  title: string;
+  items: { text: string; mean: number; section: string }[];
+  min: number; max: number;
+}) {
+  const color = tone === "good" ? "hsl(var(--climate-good))" : "hsl(var(--climate-low))";
+  return (
+    <div className="rounded-[22px] border border-border bg-card p-5">
+      <p className="flex items-center gap-2 text-[13px] font-semibold">
+        <Icon className="h-4 w-4" style={{ color }} />
+        {title}
+      </p>
+      <div className="mt-3 space-y-2.5">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] leading-snug">{it.text}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{it.section}</p>
+            </div>
+            <span
+              className="shrink-0 text-[15px] font-bold tabular-nums"
+              style={{ color: scoreColor(((it.mean - min) / (max - min)) * 100) }}
+            >
+              {it.mean.toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CategoryView({
+  category, scaleLabels, survey,
+}: {
+  category: Category;
+  scaleLabels?: string[];
+  survey: { scale_min: number; scale_max: number };
+}) {
+  const grouped = useMemo(() => {
+    const m = new Map<string, Question[]>();
+    for (const q of category.questions) {
+      if (!m.has(q.section_title)) m.set(q.section_title, []);
+      m.get(q.section_title)!.push(q);
+    }
+    return Array.from(m.entries());
+  }, [category]);
+
+  if (!category.questions.length) {
+    return (
+      <div className="rounded-[22px] border border-dashed border-border py-14 text-center text-sm text-muted-foreground">
+        Sem respostas nesta categoria.
+      </div>
+    );
+  }
+
+  let n = 0;
+  return (
+    <div className="space-y-9">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">Categoria</p>
-          <h2 className="text-3xl font-bold font-display mt-1">{category.label}</h2>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Categoria</p>
+          <h2 className="mt-1 text-[26px] font-semibold tracking-tight">{category.label}</h2>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold font-display tabular-nums">
-            {respondents}{total != null ? <span className="text-muted-foreground/70 text-2xl"> / {total}</span> : null}
+          <p className="text-[26px] font-bold leading-none tabular-nums">
+            {category.respondent_count ?? 0}
+            {category.respondent_total != null && (
+              <span className="text-[20px] text-muted-foreground"> / {category.respondent_total}</span>
+            )}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {total != null ? "respondentes" : (respondents === 1 ? "respondente" : "respondentes")}
+          <p className="text-[11.5px] text-muted-foreground">
+            {(category.respondent_count ?? 0) === 1 ? "pessoa respondeu" : "pessoas responderam"}
           </p>
         </div>
       </div>
 
-      <AverageByQuestion questions={category.questions} />
+      <AverageByQuestion questions={category.questions} survey={survey} />
 
-
-
-      {grouped.map(([sectionTitle, qs]) => (
-        <section key={sectionTitle} className="space-y-4">
-          <div className="flex items-center gap-3 sticky top-0 bg-muted/30 backdrop-blur z-10 py-2">
-            <div className="h-8 w-1 bg-primary rounded-full" />
-            <h3 className="text-lg font-bold font-display">{sectionTitle.replace(/^\s*\d+(\.\d+)*[.\)\-:]?\s*/, "")}</h3>
-            <Badge variant="outline" className="ml-auto text-xs">
+      {grouped.map(([section, qs]) => (
+        <section key={section} className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="h-7 w-1 rounded-full" style={{ background: "var(--c-primary)" }} />
+            <h3 className="text-[17px] font-semibold tracking-tight">
+              {section.replace(/^\s*\d+(\.\d+)*[.)\-:]?\s*/, "")}
+            </h3>
+            <Badge variant="outline" className="ml-auto rounded-full text-[11px]">
               {qs.length} {qs.length === 1 ? "pergunta" : "perguntas"}
             </Badge>
           </div>
           <div className="space-y-4">
-            {qs.map((q) => {
-              qIdx += 1;
-              return <QuestionCard key={q.id} index={qIdx} q={q} scaleLabels={scaleLabels} />;
-            })}
+            {qs.map((q) => { n += 1; return <QuestionCard key={q.id} index={n} q={q} scaleLabels={scaleLabels} />; })}
           </div>
         </section>
       ))}
@@ -329,109 +461,99 @@ function CategoryView({ category, scaleLabels }: { category: Category; scaleLabe
   );
 }
 
-function AverageByQuestion({ questions }: { questions: Question[] }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const items = useMemo(() => {
-    return questions
-      .filter((q) => q.type === "scale" && q.distribution && q.distribution.length > 0 && q.scale_type !== "enps")
-      .map((q) => {
-        let sum = 0, n = 0;
-        q.distribution!.forEach((d) => { sum += d.value * d.count; n += d.count; });
-        const mean = n > 0 ? sum / n : 0;
-        const max = q.scale_max ?? 5;
-        const min = q.scale_min ?? 1;
-        const pct = max > min ? ((mean - min) / (max - min)) * 100 : 0;
-        return { id: q.id, text: q.text, mean, pct, max, n };
-      })
-      .filter((it) => it.n > 0);
-  }, [questions]);
+function AverageByQuestion({
+  questions, survey,
+}: { questions: Question[]; survey: { scale_min: number; scale_max: number } }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const min = survey.scale_min ?? 1;
+  const max = survey.scale_max ?? 5;
 
-  if (items.length === 0) return null;
+  const items = useMemo(() => questions.map((q) => {
+    const m = meanOf(q);
+    if (!m) return null;
+    return {
+      id: q.id, text: q.text, mean: m.mean, n: m.n,
+      pct: ((m.mean - min) / (max - min)) * 100,
+    };
+  }).filter(Boolean) as { id: string; text: string; mean: number; n: number; pct: number }[],
+  [questions, min, max]);
+
+  if (!items.length) return null;
+
+  // Da pior para a melhor: o que precisa de atenção aparece primeiro.
+  const sorted = [...items].sort((a, b) => a.mean - b.mean);
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h3 className="text-2xl font-bold font-display">Média por Pergunta</h3>
-        <p className="text-sm text-muted-foreground">Média de cada pergunta da pesquisa. Clique para ver a pergunta completa.</p>
-      </div>
-      <Card className="p-5">
-        <div className="space-y-2">
-          {items.map((it) => {
-            const color = it.mean >= 4 ? "hsl(160 70% 40%)" : "hsl(40 90% 55%)";
-            const isOpen = !!expanded[it.id];
+    <section>
+      <h3 className="text-[17px] font-semibold tracking-tight">Média por pergunta</h3>
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
+        Da menor para a maior média. Toque para ver a pergunta inteira.
+      </p>
+      <div className="mt-3 rounded-[22px] border border-border bg-card p-4">
+        <div className="space-y-1">
+          {sorted.map((it) => {
+            const isOpen = !!open[it.id];
             return (
               <button
-                type="button"
                 key={it.id}
-                onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}
-                className="w-full grid grid-cols-[minmax(0,18rem)_1fr_auto] items-center gap-3 text-sm text-left rounded-md px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                type="button"
+                onClick={() => setOpen((s) => ({ ...s, [it.id]: !s[it.id] }))}
                 aria-expanded={isOpen}
-                title={isOpen ? "Recolher" : "Expandir"}
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent/60 sm:grid-cols-[minmax(0,17rem)_1fr_auto]"
               >
-                <div className={`text-muted-foreground ${isOpen ? "whitespace-normal break-words" : "truncate"}`}>
-                  {it.text}
-                </div>
-                <div className="h-4 bg-muted rounded">
-                  <div className="h-full rounded transition-all duration-500" style={{ width: `${it.pct}%`, backgroundColor: color }} />
-                </div>
-                <div className="tabular-nums font-mono text-xs w-12 text-right">{it.mean.toFixed(2)}</div>
+                <span className={cn("flex items-start gap-1.5 text-[13px] text-muted-foreground", !isOpen && "truncate")}>
+                  <ChevronDown className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform", isOpen && "rotate-180")} />
+                  <span className={isOpen ? "whitespace-normal break-words" : "truncate"}>{it.text}</span>
+                </span>
+                <span className="col-span-2 h-2.5 overflow-hidden rounded-full bg-muted sm:col-span-1">
+                  <span
+                    className="block h-full rounded-full transition-all duration-700"
+                    style={{ width: `${it.pct}%`, backgroundColor: scoreColor(it.pct) }}
+                  />
+                </span>
+                <span className="w-12 text-right text-[13px] font-bold tabular-nums" style={{ color: scoreColor(it.pct) }}>
+                  {it.mean.toFixed(2)}
+                </span>
               </button>
             );
           })}
         </div>
-      </Card>
+      </div>
     </section>
   );
 }
 
 function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; scaleLabels?: string[] }) {
-
   const isText = q.type === "text";
   const isChoice = q.type === "choice";
+
   return (
-    <Card className="overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-start gap-4 p-5 border-b bg-card">
-        <div className="shrink-0 h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold font-mono text-sm">
-          {index.toString().padStart(2, "0")}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-base leading-snug">{q.text}</h4>
-        </div>
+    <article className="overflow-hidden rounded-[22px] border border-border bg-card">
+      <div className="flex items-start gap-3.5 border-b border-border p-5">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[12.5px] font-bold tabular-nums"
+          style={{ background: "color-mix(in srgb, var(--c-primary) 12%, #fff)", color: "var(--c-primary)" }}
+        >
+          {String(index).padStart(2, "0")}
+        </span>
+        <h4 className="text-[15px] font-semibold leading-snug">{q.text}</h4>
       </div>
 
-      {/* Card body */}
       <div className="p-5">
         {!isText && q.distribution && (
-          q.stats_by_leader && q.stats_by_leader.length > 0 ? (
+          q.stats_by_leader?.length ? (
             <div className="space-y-6">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
-                    Geral
-                  </span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">{q.total}</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
+              <GroupBlock label="Geral" total={q.total}>
                 {q.scale_type === "enps" && q.enps
                   ? <EnpsView q={q} />
                   : <ScaleDistribution distribution={q.distribution} scaleLabels={isChoice ? undefined : (q.scale_labels ?? scaleLabels)} reverse={!isChoice} />}
-              </div>
+              </GroupBlock>
               {q.stats_by_leader.map((g) => (
-                <div key={g.leader}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-px flex-1 bg-border" />
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
-                      {g.leader}
-                    </span>
-                    <span className="text-[11px] tabular-nums text-muted-foreground">{g.total}</span>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
+                <GroupBlock key={g.leader} label={g.leader} total={g.total}>
                   {q.scale_type === "enps" && g.enps
                     ? <EnpsView q={{ ...q, distribution: g.distribution, total: g.total, enps: g.enps }} />
                     : <ScaleDistribution distribution={g.distribution} scaleLabels={isChoice ? undefined : (q.scale_labels ?? scaleLabels)} reverse={!isChoice} />}
-                </div>
+                </GroupBlock>
               ))}
             </div>
           ) : q.scale_type === "enps" && q.enps ? (
@@ -441,113 +563,111 @@ function QuestionCard({ index, q, scaleLabels }: { index: number; q: Question; s
           )
         )}
 
-        {isText && (
-          <div className="space-y-5">
-            {q.comments_by_leader && q.comments_by_leader.length > 0 ? (
-              q.comments_by_leader.map((group) => (
-                <div key={group.leader} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-px flex-1 bg-border" />
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
-                      {group.leader}
-                    </span>
-                    <span className="text-[11px] tabular-nums text-muted-foreground">
-                      {group.comments.length}
-                    </span>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
-                  <div className="space-y-2.5">
-                    {group.comments.map((c, i) => (
-                      <blockquote
-                        key={i}
-                        className="relative pl-4 pr-3 py-3 bg-muted/40 rounded-lg border-l-4 border-primary text-sm leading-relaxed whitespace-pre-wrap"
-                      >
-                        <span className="text-muted-foreground/60 absolute left-1.5 top-1 text-base leading-none">"</span>
-                        {c}
-                      </blockquote>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : q.comments && q.comments.length > 0 ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full bg-muted/60 border">
-                    Comentários
-                  </span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {q.comments.length}
-                  </span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-                <div className="space-y-2.5">
-                  {q.comments.map((c, i) => (
-                    <blockquote
-                      key={i}
-                      className="relative pl-4 pr-3 py-3 bg-muted/40 rounded-lg border-l-4 border-primary text-sm leading-relaxed whitespace-pre-wrap"
-                    >
-                      <span className="text-muted-foreground/60 absolute left-1.5 top-1 text-base leading-none">"</span>
-                      {c}
-                    </blockquote>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground italic text-center py-6">Sem comentários nesta categoria.</p>
-            )}
-          </div>
-        )}
+        {isText && <Comments q={q} />}
       </div>
-    </Card>
+    </article>
   );
 }
 
-function ScaleDistribution({ distribution, scaleLabels, reverse = true }: { distribution: Distribution[]; scaleLabels?: string[]; reverse?: boolean }) {
-  const items = reverse ? distribution.slice().reverse() : distribution;
-  const getColor = (item: Distribution) => {
-    if (!item.label) return SCORE_COLORS[item.value] ?? "hsl(var(--primary))";
-    const normalized = item.label
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+function GroupBlock({ label, total, children }: { label: string; total: number; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-px flex-1 bg-border" />
+        <span className="rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{total}</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      {children}
+    </div>
+  );
+}
 
-    if (normalized.includes("nao")) return "hsl(0 72% 55%)";
-    if (normalized.includes("sim")) return "hsl(145 60% 42%)";
-    if (normalized.includes("parte") || normalized.includes("talvez")) return "hsl(45 90% 55%)";
-    return SCORE_COLORS[item.value] ?? "hsl(var(--primary))";
+function Comments({ q }: { q: Question }) {
+  const groups = q.comments_by_leader?.length
+    ? q.comments_by_leader
+    : q.comments?.length
+      ? [{ leader: "Comentários", comments: q.comments }]
+      : [];
+
+  if (!groups.length) {
+    return (
+      <p className="py-6 text-center text-[13px] italic text-muted-foreground">
+        Sem comentários nesta categoria.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <GroupBlock key={group.leader} label={group.leader} total={group.comments.length}>
+          <div className="space-y-2.5">
+            {group.comments.map((c, i) => (
+              <blockquote
+                key={i}
+                className="relative whitespace-pre-wrap rounded-xl bg-muted/50 py-3 pl-8 pr-3.5 text-[13.5px] leading-relaxed"
+                style={{ borderLeft: "3px solid var(--c-primary)" }}
+              >
+                <MessageSquareQuote className="absolute left-2.5 top-3 h-3.5 w-3.5 text-muted-foreground/60" />
+                {c}
+              </blockquote>
+            ))}
+          </div>
+        </GroupBlock>
+      ))}
+    </div>
+  );
+}
+
+function ScaleDistribution({
+  distribution, scaleLabels, reverse = true,
+}: { distribution: Distribution[]; scaleLabels?: string[]; reverse?: boolean }) {
+  const items = reverse ? distribution.slice().reverse() : distribution;
+  const values = distribution.map((d) => d.value);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+
+  /**
+   * Cor da faixa. Escolha com rótulo próprio (Sim/Não/Em parte) segue o
+   * sentido da palavra; escala numérica usa a posição dentro da própria
+   * escala — antes o mapa era fixo de 1 a 5 e uma escala de 1 a 7 saía
+   * toda cinza a partir do 6.
+   */
+  const colorFor = (d: Distribution) => {
+    if (d.label) {
+      const norm = d.label.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (norm.includes("nao")) return "hsl(var(--climate-critical))";
+      if (norm.startsWith("sim")) return "hsl(var(--climate-high))";
+      if (norm.includes("parte") || norm.includes("talvez")) return "hsl(var(--climate-mid))";
+    }
+    return scoreColor(hi > lo ? ((d.value - lo) / (hi - lo)) * 100 : 100);
   };
 
   return (
     <div className="space-y-2.5">
       {items.map((d) => {
         const label = d.label ?? scaleLabels?.[d.value - 1];
-        const color = getColor(d);
+        const color = colorFor(d);
         return (
-          <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
-            <div className="flex items-center gap-2 w-44">
-              <div
-                className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
+          <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <div className="flex w-36 items-center gap-2 sm:w-44">
+              <span
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[12px] font-bold text-white"
                 style={{ backgroundColor: color }}
               >
                 {d.value}
-              </div>
-              {label && (
-                <span className="text-xs text-muted-foreground truncate" title={label}>
-                  {label}
-                </span>
-              )}
+              </span>
+              {label && <span className="truncate text-[12px] text-muted-foreground" title={label}>{label}</span>}
             </div>
-            <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${d.percent}%`, backgroundColor: color }}
-              />
+            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${d.percent}%`, backgroundColor: color }} />
             </div>
-            <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
-              <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
-              <span className="text-xs text-muted-foreground">({d.count})</span>
+            <div className="flex w-[84px] items-baseline justify-end gap-1.5 tabular-nums">
+              <span className="text-[13px] font-bold">{d.percent.toFixed(1)}%</span>
+              <span className="text-[11px] text-muted-foreground">({d.count})</span>
             </div>
           </div>
         );
@@ -556,73 +676,49 @@ function ScaleDistribution({ distribution, scaleLabels, reverse = true }: { dist
   );
 }
 
-
-
 function EnpsView({ q }: { q: Question }) {
   const e = q.enps!;
   const dist = q.distribution ?? [];
   const colorFor = (v: number) =>
-    v >= 9 ? "hsl(145 60% 42%)" : v >= 7 ? "hsl(45 90% 55%)" : "hsl(0 72% 55%)";
-  const scoreColor = e.score >= 50 ? "hsl(145 60% 42%)"
-    : e.score >= 0 ? "hsl(45 90% 55%)"
-    : "hsl(0 72% 55%)";
+    v >= 9 ? "hsl(var(--climate-high))" : v >= 7 ? "hsl(var(--climate-mid))" : "hsl(var(--climate-critical))";
+
   return (
-    <div className="space-y-6">
-      {/* Score */}
-      <div className="flex items-center justify-between gap-6 rounded-xl border bg-muted/30 p-5">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-border bg-muted/40 p-5">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Score eNPS</p>
-          <p className="text-4xl font-bold font-display tabular-nums mt-1" style={{ color: scoreColor }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Score eNPS</p>
+          <p className="mt-1 text-[34px] font-bold leading-none tabular-nums" style={{ color: enpsBand(e.score).color }}>
             {e.score > 0 ? `+${e.score}` : e.score}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">Promotores − Detratores · {q.total} {q.total === 1 ? "resposta" : "respostas"}</p>
+          <p className="mt-1 text-[11.5px] text-muted-foreground">
+            {enpsBand(e.score).label} · {q.total} {q.total === 1 ? "resposta" : "respostas"}
+          </p>
         </div>
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground">Promotores</p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(145 60% 42%)" }}>{e.promoters_pct.toFixed(0)}%</p>
-            <p className="text-[11px] text-muted-foreground">({e.promoters}) · 9–10</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground">Neutros</p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(45 90% 50%)" }}>{e.passives_pct.toFixed(0)}%</p>
-            <p className="text-[11px] text-muted-foreground">({e.passives}) · 7–8</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground">Detratores</p>
-            <p className="text-xl font-bold tabular-nums" style={{ color: "hsl(0 72% 55%)" }}>{e.detractors_pct.toFixed(0)}%</p>
-            <p className="text-[11px] text-muted-foreground">({e.detractors}) · 0–6</p>
-          </div>
+        <div className="flex gap-5 text-center">
+          <EnpsPart label="Promotores" hint="9–10" pct={e.promoters_pct} n={e.promoters} color="hsl(var(--climate-high))" />
+          <EnpsPart label="Neutros" hint="7–8" pct={e.passives_pct} n={e.passives} color="hsl(var(--climate-mid))" />
+          <EnpsPart label="Detratores" hint="0–6" pct={e.detractors_pct} n={e.detractors} color="hsl(var(--climate-critical))" />
         </div>
       </div>
 
-      {/* Distribution 0-10 */}
       <div className="space-y-2">
-        {dist.slice().reverse().map((d) => {
-          const color = colorFor(d.value);
-          return (
-            <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm">
-              <div className="flex items-center gap-2 w-16">
-                <div
-                  className="h-7 w-7 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs shrink-0"
-                  style={{ backgroundColor: color }}
-                >
-                  {d.value}
-                </div>
-              </div>
-              <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${d.percent}%`, backgroundColor: color }}
-                />
-              </div>
-              <div className="flex items-baseline gap-1.5 tabular-nums w-24 justify-end">
-                <span className="font-bold text-sm">{d.percent.toFixed(1)}%</span>
-                <span className="text-xs text-muted-foreground">({d.count})</span>
-              </div>
+        {dist.slice().reverse().map((d) => (
+          <div key={d.value} className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <span
+              className="grid h-7 w-7 place-items-center rounded-lg text-[12px] font-bold text-white"
+              style={{ backgroundColor: colorFor(d.value) }}
+            >
+              {d.value}
+            </span>
+            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${d.percent}%`, backgroundColor: colorFor(d.value) }} />
             </div>
-          );
-        })}
+            <div className="flex w-[84px] items-baseline justify-end gap-1.5 tabular-nums">
+              <span className="text-[13px] font-bold">{d.percent.toFixed(1)}%</span>
+              <span className="text-[11px] text-muted-foreground">({d.count})</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

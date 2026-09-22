@@ -1,15 +1,27 @@
-import { useAuth } from '@/lib/auth';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { Loader2, ShieldAlert } from "lucide-react";
+import { EmptyState } from "@/components/PageHeader";
 
+/** Manda cada perfil para a sua primeira tela. */
 export default function AdminIndex() {
   const { isSuperAdmin, isCompanyAdmin, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+
+  if (loading) {
+    return (
+      <div className="grid place-items-center py-24">
+        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+      </div>
+    );
+  }
   if (isSuperAdmin) return <Navigate to="/admin/companies" replace />;
   if (isCompanyAdmin) return <Navigate to="/admin/dashboard" replace />;
+
   return (
-    <div className="text-center py-20">
-      <h1 className="text-2xl font-bold mb-2">Sem acesso</h1>
-      <p className="text-muted-foreground">Sua conta não possui permissão de administrador. Entre em contato com o suporte.</p>
-    </div>
+    <EmptyState
+      icon={ShieldAlert}
+      title="Sua conta ainda não tem acesso"
+      description="Ela existe, mas não está ligada a nenhuma empresa nem tem permissão de administrador. Procure quem administra a plataforma para liberar."
+    />
   );
 }
