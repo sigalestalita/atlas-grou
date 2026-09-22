@@ -1,349 +1,176 @@
-# Atlas: Pesquisa de Clima Organizacional
+# Atlas — Pesquisa de Clima Organizacional
 
-Crie uma plataforma web white-label de Pesquisa de Clima Organizacional, multiempresa (multi-tenant), com foco em anonimato, escalabilidade e usabilidade.
+Plataforma white-label de pesquisa de clima, multiempresa. A Grou administra; cada
+empresa cliente tem a própria pesquisa, os próprios dados e a própria identidade.
 
-O sistema deve permitir que a Grou (administradora da plataforma) crie e gerencie múltiplas pesquisas para diferentes empresas (ex: Tectaris), cada uma com sua própria identidade, estrutura e dados isolados.
-
----
-
-## 🎯 OBJETIVO
-
-Permitir a criação, distribuição e análise de pesquisas de clima organizacional com:
-
-- Respostas anônimas
-
-- Links individuais únicos por colaborador
-
-- Dashboard analítico avançado
-
-- Estrutura replicável para múltiplas empresas
+**App**: https://atlas-grou.lovable.app · **Editor**: [Lovable](https://lovable.dev/projects/37f28f3c-431d-4248-b63c-086ac955bceb)
 
 ---
 
-## 🏢 ARQUITETURA MULTI-TENANT
+## A regra que manda em tudo
 
-Criar estrutura com isolamento total por empresa:
+O colaborador responde sob promessa de anonimato. Isso não é um recurso da
+plataforma, é a condição para ela funcionar: sem essa confiança as respostas
+viram o que a pessoa acha que o chefe quer ler, e a pesquisa inteira perde o
+sentido.
 
-### Entidade: Empresa
+Na prática:
 
-- Nome
+- **Duas tabelas separadas.** `respondents` guarda quem foi convidado e se já
+  respondeu. `survey_responses` guarda as respostas, sem nenhuma referência ao
+  respondente. Não existe chave ligando as duas.
+- **Mínimo de 3 pessoas por recorte.** Área, liderança ou categoria com menos de
+  três respondentes não aparece separada em lugar nenhum — nem na tela, nem na
+  planilha, nem no relatório do cliente. A constante é `MIN_GROUP`, em
+  `src/lib/climate.ts`.
+  O corte conta **pessoas**, não linhas de resposta: uma pesquisa de dez
+  perguntas transforma um respondente em dez linhas, e contar linhas deixava
+  passar o grupo de uma pessoa só.
+- **Nada exportado com nome.** Não há, e não deve voltar a haver, exportação que
+  ligue respostas a uma pessoa. Uma funcionalidade dessas existiu e foi removida:
+  ela adivinhava a autoria por proximidade de horário, o que além de quebrar a
+  promessa dava errado — duas pessoas da mesma área respondendo perto uma da
+  outra saíam com as respostas trocadas.
+- **Envios sem horário na tela de Respostas.** Ordenar os envios por horário
+  permitiria cruzá-los com a lista de quem já respondeu, em Acompanhamento, e
+  descobrir de quem é cada resposta. Por isso a tela mostra só a data e embaralha
+  os envios dentro do dia.
 
-- Logo
-
-- Cores (primary, secondary)
-
-- Nome da pesquisa ativa
-
-- Configurações (ex: anonimato, tipo de escala)
-
-Cada empresa terá:
-
-- Seus colaboradores (não autenticados)
-
-- Suas lideranças
-
-- Sua pesquisa
-
-- Seus resultados
-
----
-
-## 👤 TIPOS DE USUÁRIO
-
-### 1. Admin Grou (Super Admin)
-
-- Cria e gerencia empresas
-
-- Cria pesquisas base (templates)
-
-- Acompanha todas as empresas
-
-- Pode acessar qualquer dashboard
-
-### 2. Admin da Empresa (ex: consultoria RH / Tectaris)
-
-- Gerencia apenas sua empresa
-
-- Configura pesquisa
-
-- Importa colaboradores
-
-- Acompanha resultados
-
-### ❗ IMPORTANTE:
-
-Colaboradores NÃO têm login
+Qualquer mudança que mexa nisso merece uma conversa antes de ser feita.
 
 ---
 
-## 🔗 SISTEMA DE RESPOSTA (ANÔNIMO)
+## Como o sistema se organiza
 
-### Modelo:
+### Quem usa
 
-- Cada colaborador recebe um link único e individual
+| Perfil | O que enxerga |
+|---|---|
+| **Super admin** | Todas as empresas, os templates e os outros administradores |
+| **Admin de empresa** | Só a empresa dele |
+| **Colaborador** | Só a pesquisa. Não tem login — entra por um link |
 
-- Exemplo:
+### O ciclo de uma pesquisa
 
-  /survey/tectaris/{token_unico}
+1. **Montar** — questionário a partir de um template, lideranças avaliadas, prazo
+2. **Distribuir** — importar a lista e gerar um link por pessoa, ou usar um link aberto
+3. **Acompanhar** — quem respondeu, quem parou no meio, quem nem abriu
+4. **Ler** — dashboard, relatório do cliente e planilha
 
-### Regras:
+### Como o colaborador responde
 
-- Token único por colaborador
+Uma pergunta por tela, mobile-first — o telefone é o canal principal. O rascunho
+é salvo no navegador a cada resposta, então dá para fechar e voltar depois.
 
-- Token permite:
+A pesquisa acontece em **etapas**: primeiro as perguntas sobre a organização,
+depois uma rodada por liderança avaliada. Quem lidera uma área avalia a liderança
+acima; quem é liderança empresarial não avalia ninguém.
 
-  - Apenas 1 resposta
+Cada etapa é enviada assim que termina, e a lista de etapas concluídas fica em
+`respondents.completed_rounds`. É isso que permite retomar de outro aparelho sem
+refazer — e sem gravar o mesmo voto duas vezes.
 
-- Não exigir login
+### Dois modos de distribuição
 
-- Não armazenar nome junto com respostas (anonimato real)
-
-### ⚠️ ANONIMATO CONTROLADO:
-
-- O sistema sabe quem respondeu (para controle de taxa de resposta)
-
-- Mas NÃO vincula identidade às respostas no banco analítico
-
-Separar:
-
-- Tabela de envio (tracking)
-
-- Tabela de respostas (anonimizada)
-
----
-
-## 📩 DISTRIBUIÇÃO
-
-- Upload de planilha com colaboradores
-
-- Sistema gera automaticamente:
-
-  - Tokens únicos
-
-  - Links individuais
-
-- Opções:
-
-  - Exportar lista com links
-
-  - (Opcional) Disparo de email via sistema
+| | Link individual | Link aberto |
+|---|---|---|
+| Cadastro | Necessário | Nenhum |
+| Taxa de resposta | Sim | Não há denominador |
+| Lembrete por pessoa | Sim | Não |
+| Uma resposta por pessoa | Garantido pelo token | Não garantido |
 
 ---
 
-## 🧩 ESTRUTURA DE DADOS
+## Como ler os números
 
-### Colaboradores (tracking apenas)
+Tudo passa por `src/lib/climate.ts` e `src/lib/useSurveyAnalytics.ts`, para que a
+tela, o relatório e a planilha contem a mesma história.
 
-- ID
-
-- Nome
-
-- Email
-
-- Departamento
-
-- Liderança empresarial
-
-- Liderança de departamento
-
-- Token único
-
-- Status (respondeu / não respondeu)
-
-### Respostas (ANÔNIMAS)
-
-- ID
-
-- Empresa
-
-- Pergunta
-
-- Resposta (escala)
-
-- Timestamp
-
-- Metadados agregáveis (ex: departamento, liderança) → SEM identificação pessoal
+- **Score de clima (0–100)** — a média da escala normalizada, levando em conta o
+  mínimo: numa escala de 1 a 5, a pior avaliação possível é 0, não 20.
+  As faixas vão de *Crítico* a *Muito saudável*, cada uma com uma leitura em
+  `climateBand()`.
+- **eNPS** — promotores (9–10) menos detratores (0–6), como manda a métrica.
+  Fica **fora** do score geral: uma escala de 0 a 10 misturada numa de 1 a 5
+  empurraria o resultado para cima.
+- **Concordância** — quanto o grupo respondeu parecido, de 0 a 100. Uma média 3
+  pode ser "todo mundo achou regular" ou "metade amou, metade odiou", e as duas
+  pedem ações opostas. O dashboard usa isso para a seção *Temas que dividem o time*.
 
 ---
 
-## 📋 PESQUISA
+## Stack
 
-### Estrutura
+React 18 · TypeScript · Vite · Tailwind · shadcn/ui · Supabase (Postgres, Auth,
+Storage, Edge Functions) · Recharts · ExcelJS
 
-- Seções:
+### Identidade visual
 
-  - Liderança Empresarial
+Segue o design system do Sales Coach: navy `#071A34`, azul `#15498D`, glow
+`#4F8BF0`, tipografia Poppins. Os tokens estão em `src/index.css`.
 
-  - Liderança de Departamento
-
-- Perguntas:
-
-  - Inseridas manualmente ou via importação
-
-  - Tipo escala (definida pelo admin)
-
-### UX do Respondente:
-
-- Interface limpa estilo Typeform
-
-- Uma pergunta por vez (ou blocos leves)
-
-- Barra de progresso
-
-- Tempo estimado
-
-- Feedback ao concluir
+A pesquisa que o colaborador responde e o relatório do cliente são **white-label**:
+herdam logo e cores da empresa por `--c-primary` / `--c-secondary`, e não trazem
+nenhuma marca da Grou. O layout é o mesmo do resto da plataforma.
 
 ---
 
-## 🎨 WHITE-LABEL (CRÍTICO)
-
-Cada empresa deve ter:
-
-- Logo próprio
-
-- Cores personalizadas
-
-- Nome da pesquisa
-
-- URL customizada (ex: /tectaris)
-
-Sem qualquer menção à Grou na interface final (modo white-label completo)
-
----
-
-## 📊 DASHBOARD (ADMIN EMPRESA)
-
-### Visão Geral
-
-- Taxa de resposta (%)
-
-- Total respondido vs pendente
-
-### Análises
-
-- Média por pergunta
-
-- Média por:
-
-  - Liderança empresarial
-
-  - Liderança de departamento
-
-  - Departamento
-
-### Visualizações
-
-- Gráficos de barras
-
-- Heatmaps
-
-- Comparações entre lideranças
-
-### Insights automáticos
-
-- Destacar pontos críticos (baixa pontuação)
-
-- Destacar pontos fortes
-
----
-
-## 📤 EXPORTAÇÃO
-
-- Excel / CSV com:
-
-  - Dados agregados
-
-  - Dados por grupo (departamento/liderança)
-
-- Nunca exportar resposta vinculada a nome
-
----
-
-## ⚙️ FUNCIONALIDADES ADMIN
-
-- Criar/editar empresas
-
-- Duplicar pesquisa (template)
-
-- Importar colaboradores via Excel
-
-- Gerar links automaticamente
-
-- Acompanhar progresso em tempo real
-
-- Encerrar pesquisa
-
----
-
-## 🔒 REGRAS DE ANONIMATO
-
-- Nunca exibir respostas individuais identificáveis
-
-- Bloquear visualização quando grupos < 3 pessoas (anti identificação)
-
-- Separação lógica no banco:
-
-  - Tracking (quem respondeu)
-
-  - Respostas (anônimas)
-
----
-
-## 📱 RESPONSIVIDADE
-
-- Mobile-first
-
-- Experiência fluida em celular (principal canal de resposta)
-
----
-
-## 🚀 DIFERENCIAIS
-
-- Score geral de clima (0–100)
-
-- Benchmark interno entre lideranças
-
-- Indicador visual de risco organizacional
-
-- Sistema preparado para múltiplas pesquisas simultâneas
-
----
-
-## 📌 RESULTADO ESPERADO
-
-Uma plataforma white-label de pesquisas de clima, escalável, pronta para:
-
-- Reutilização para múltiplos clientes 
-
-
-Com:
-
-- Alta taxa de resposta (UX otimizada)
-
-- Segurança de anonimato
-
-- Forte capacidade analítica
-
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://atlas-grou.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/37f28f3c-431d-4248-b63c-086ac955bceb).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Rodando localmente
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+npm install
+npm run dev      # http://localhost:8080
+npm test         # vitest
+npm run build
+```
+
+As variáveis de ambiente do Supabase ficam em `.env`.
+
+### Primeiro acesso
+
+`/setup` cria o super admin inicial. Só funciona enquanto não existir nenhum —
+depois disso, novos administradores saem de **Administradores**, dentro do painel.
+
+### Banco
+
+As migrações ficam em `supabase/migrations/`. O Lovable aplica as novas ao
+sincronizar; para aplicar à mão, use a CLI do Supabase.
+
+A migração `20260922120000` acrescenta:
+
+- `survey_responses.submission_id` — agrupa as linhas de um mesmo envio sem
+  identificar quem enviou. É o que torna o corte de anonimato uma contagem de
+  pessoas.
+- `surveys.opens_at` / `closes_at` / `wave_label` — janela de resposta e nome da
+  rodada, para comparar ciclos.
+- `respondents.started_at` / `completed_rounds` / `last_reminder_at` —
+  acompanhamento de quem começou e não terminou, e retomada segura.
+- `user_roles.email` — preenchido por gatilho, para a tela de administradores
+  dizer de quem é cada permissão.
+
+O front funciona com ou sem essa migração aplicada: onde a coluna nova pode não
+existir, há um caminho alternativo.
+
+---
+
+## Mapa do código
+
+```
+src/
+  lib/
+    climate.ts              Score, faixas, eNPS, concordância, corte de anonimato
+    useSurveyAnalytics.ts   Carrega e agrega uma pesquisa inteira, uma vez só
+    auth.tsx                Sessão e papéis
+  components/
+    AdminLayout.tsx         Casca do painel: menu navy flutuante
+    AtlasMark.tsx           Monograma em SVG, herda a cor de onde estiver
+    StatCard.tsx            Cartão de indicador e anel de score
+    PageHeader.tsx          Cabeçalho, estado vazio e aviso de anonimato
+  pages/
+    SurveyPage.tsx          A pesquisa que o colaborador responde (white-label)
+    PublicReport.tsx        O relatório entregue ao cliente (white-label)
+    admin/                  O painel
+supabase/
+  functions/public-report/  Agrega o relatório público, com código de acesso
+  functions/create-admin/   Cria administrador (exige super admin, salvo no bootstrap)
 ```
