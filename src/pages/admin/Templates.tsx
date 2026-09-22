@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { PageHeader } from '@/components/PageHeader';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -363,14 +364,13 @@ export default function Templates() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Templates de Pesquisa</h1>
-          <p className="text-muted-foreground">Crie modelos reutilizáveis e complexos de pesquisa</p>
-        </div>
+    <>
+      <PageHeader
+        title="Templates"
+        description="Modelos de questionário reaproveitáveis. Cada empresa nasce de um deles e ajusta o que precisar."
+        actions={
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Novo Template</Button></DialogTrigger>
+          <DialogTrigger asChild><Button className="h-9 rounded-xl"><Plus className="mr-2 h-4 w-4" />Novo template</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Novo Template</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
@@ -390,12 +390,13 @@ export default function Templates() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
         <div className="space-y-3">
           {templates.map(t => (
-            <Card key={t.id} className={`cursor-pointer transition-all ${selectedTemplate?.id === t.id ? 'ring-2 ring-primary' : 'hover:shadow-md'}`} onClick={() => setSelectedTemplate(t)}>
+            <Card key={t.id} className={`cursor-pointer rounded-[18px] transition-all ${selectedTemplate?.id === t.id ? 'ring-2 ring-primary' : 'card-hover-glow'}`} onClick={() => setSelectedTemplate(t)}>
               <CardHeader className="flex flex-row items-center justify-between py-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <FileText className="h-4 w-4 text-primary shrink-0" />
@@ -514,6 +515,6 @@ export default function Templates() {
           <Card><CardContent className="py-12 text-center text-muted-foreground">Selecione ou crie um template para editar</CardContent></Card>
         )}
       </div>
-    </div>
+    </>
   );
 }

@@ -97,3 +97,39 @@ CREATE POLICY "Anonymous users can insert responses"
 -- não respostas: o anonimato continua intacto.
 ALTER TABLE public.respondents
   ADD COLUMN IF NOT EXISTS completed_rounds JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- E-mail do administrador junto da permissão.
+--
+-- A tela de Administradores listava só os 8 primeiros caracteres do user_id,
+-- porque o e-mail vive em auth.users e o cliente do navegador não alcança essa
+-- tabela. Na prática não dava para saber de quem era cada permissão — nem para
+-- revogar a pessoa certa. O gatilho abaixo copia o e-mail no momento em que a
+-- permissão é criada. É informação que o super admin já pode ver por
+-- definição: é ele quem cria e remove esses acessos.
+ALTER TABLE public.user_roles
+  ADD COLUMN IF NOT EXISTS email TEXT;
+
+CREATE OR REPLACE FUNCTION public.fill_user_role_email()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF NEW.email IS NULL THEN
+    SELECT u.email INTO NEW.email FROM auth.users u WHERE u.id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS user_roles_fill_email ON public.user_roles;
+CREATE TRIGGER user_roles_fill_email
+  BEFORE INSERT OR UPDATE OF user_id ON public.user_roles
+  FOR EACH ROW EXECUTE FUNCTION public.fill_user_role_email();
+
+-- Preenche as permissões que já existem.
+UPDATE public.user_roles r
+SET email = u.email
+FROM auth.users u
+WHERE r.user_id = u.id AND r.email IS NULL;

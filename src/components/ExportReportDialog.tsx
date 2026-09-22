@@ -141,8 +141,8 @@ export default function ExportReportDialog({
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
-      const primary = branding?.primary || '#ff5700';
-      const secondary = branding?.secondary || '#03104f';
+      const primary = branding?.primary || '#15498D';
+      const secondary = branding?.secondary || '#071A34';
 
       const hexToRgb = (hex: string): [number, number, number] => {
         const h = hex.replace('#', '');

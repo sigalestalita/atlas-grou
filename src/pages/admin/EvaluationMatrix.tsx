@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { PageHeader } from '@/components/PageHeader';
 import { useOutletContext, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
@@ -202,34 +203,31 @@ export default function EvaluationMatrix() {
   const totalAssignments = Object.values(assignments).reduce((acc, set) => acc + set.size, 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <UserCheck className="h-5 w-5" />
-            Quem Avalia Quem
-          </h2>
-          <p className="text-sm text-muted-foreground">Configure as atribuições de avaliação para cada pesquisa</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {surveys.length > 0 && (
-            <Select value={selectedSurvey} onValueChange={setSelectedSurvey}>
-              <SelectTrigger className="w-64"><SelectValue placeholder="Selecione a pesquisa" /></SelectTrigger>
-              <SelectContent>
-                {surveys.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {dirty && (
-            <Button onClick={save} disabled={saving}>
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? 'Salvando...' : 'Salvar'}
-            </Button>
-          )}
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Quem avalia quem"
+        description="Define quem cada pessoa vai avaliar. Sem atribuição, a pessoa responde só as perguntas sobre a organização."
+        actions={
+          <>
+            {surveys.length > 0 && (
+              <Select value={selectedSurvey} onValueChange={setSelectedSurvey}>
+                <SelectTrigger className="h-9 w-64 rounded-xl"><SelectValue placeholder="Escolha a pesquisa" /></SelectTrigger>
+                <SelectContent>
+                  {surveys.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {dirty && (
+              <Button className="h-9 rounded-xl" onClick={save} disabled={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? 'Salvando…' : 'Salvar alterações'}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {!selectedSurvey && (
         <Card><CardContent className="py-12 text-center text-muted-foreground">Nenhuma pesquisa encontrada para esta empresa.</CardContent></Card>
@@ -351,6 +349,6 @@ export default function EvaluationMatrix() {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

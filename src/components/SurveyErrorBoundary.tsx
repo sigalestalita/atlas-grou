@@ -28,10 +28,10 @@ export class SurveyErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.hasError) return this.props.children;
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-orange-50 to-white">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <div className="max-w-md w-full text-center bg-white rounded-2xl border shadow-sm p-8">
-          <div className="w-14 h-14 rounded-full bg-orange-100 mx-auto mb-4 flex items-center justify-center">
-            <AlertTriangle className="h-7 w-7 text-orange-600" />
+          <div className="w-14 h-14 rounded-full bg-secondary mx-auto mb-4 flex items-center justify-center">
+            <AlertTriangle className="h-7 w-7 text-[hsl(var(--warning))]" />
           </div>
           <h1 className="text-xl font-bold mb-2">Algo deu errado</h1>
           <p className="text-sm text-muted-foreground mb-6">
