@@ -134,13 +134,17 @@ export type Database = {
         Row: {
           company_id: string
           company_leadership: string | null
+          completed_rounds: Json
           created_at: string
           department: string | null
           department_leadership: string | null
           email: string | null
           id: string
+          last_reminder_at: string | null
           name: string | null
+          reminder_count: number
           responded_at: string | null
+          started_at: string | null
           status: string
           survey_id: string
           token: string
@@ -148,13 +152,17 @@ export type Database = {
         Insert: {
           company_id: string
           company_leadership?: string | null
+          completed_rounds?: Json
           created_at?: string
           department?: string | null
           department_leadership?: string | null
           email?: string | null
           id?: string
+          last_reminder_at?: string | null
           name?: string | null
+          reminder_count?: number
           responded_at?: string | null
+          started_at?: string | null
           status?: string
           survey_id: string
           token: string
@@ -162,13 +170,17 @@ export type Database = {
         Update: {
           company_id?: string
           company_leadership?: string | null
+          completed_rounds?: Json
           created_at?: string
           department?: string | null
           department_leadership?: string | null
           email?: string | null
           id?: string
+          last_reminder_at?: string | null
           name?: string | null
+          reminder_count?: number
           responded_at?: string | null
+          started_at?: string | null
           status?: string
           survey_id?: string
           token?: string
@@ -245,6 +257,7 @@ export type Database = {
           evaluated_leader: string | null
           id: string
           question_id: string
+          submission_id: string | null
           submitted_at: string
           survey_id: string
           text_value: string | null
@@ -257,6 +270,7 @@ export type Database = {
           evaluated_leader?: string | null
           id?: string
           question_id: string
+          submission_id?: string | null
           submitted_at?: string
           survey_id: string
           text_value?: string | null
@@ -269,6 +283,7 @@ export type Database = {
           evaluated_leader?: string | null
           id?: string
           question_id?: string
+          submission_id?: string | null
           submitted_at?: string
           survey_id?: string
           text_value?: string | null
@@ -328,6 +343,7 @@ export type Database = {
       }
       surveys: {
         Row: {
+          closes_at: string | null
           company_id: string | null
           created_at: string
           description: string | null
@@ -336,14 +352,17 @@ export type Database = {
           is_template: boolean
           leaders: Json | null
           open_access: boolean
+          opens_at: string | null
           scale_labels: Json | null
           scale_max: number
           scale_min: number
           status: string
           title: string
           updated_at: string
+          wave_label: string | null
         }
         Insert: {
+          closes_at?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
@@ -352,14 +371,17 @@ export type Database = {
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean
+          opens_at?: string | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
           status?: string
           title: string
           updated_at?: string
+          wave_label?: string | null
         }
         Update: {
+          closes_at?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
@@ -368,12 +390,14 @@ export type Database = {
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean
+          opens_at?: string | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
           status?: string
           title?: string
           updated_at?: string
+          wave_label?: string | null
         }
         Relationships: [
           {
@@ -389,6 +413,7 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string
+          email: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
@@ -396,6 +421,7 @@ export type Database = {
         Insert: {
           company_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
@@ -403,6 +429,7 @@ export type Database = {
         Update: {
           company_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
