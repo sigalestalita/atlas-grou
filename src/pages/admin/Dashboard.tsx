@@ -41,8 +41,10 @@ export default function Dashboard() {
 
   const [leaderFilter, setLeaderFilter] = useState("all");
   const [showExport, setShowExport] = useState(false);
+  // Vazio = a mais recente. Trocar aqui abre uma rodada anterior.
+  const [surveyId, setSurveyId] = useState<string>("");
 
-  const a = useSurveyAnalytics(companyId, { leaderFilter });
+  const a = useSurveyAnalytics(companyId, { leaderFilter, surveyId: surveyId || undefined });
 
   const band = climateBand(a.overallScore);
   const scaleMax = a.survey?.scale_max ?? 5;
@@ -228,14 +230,32 @@ export default function Dashboard() {
       <>
         <PageHeader
           title={a.survey.title}
-          description="A pesquisa está no ar. O painel se preenche a partir da primeira resposta."
+          description="Nenhuma resposta nesta pesquisa ainda."
+          actions={
+            a.availableSurveys.length > 1 ? (
+              <Select value={surveyId || a.survey.id} onValueChange={setSurveyId}>
+                <SelectTrigger className="h-9 w-64 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {a.availableSurveys.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {truncate(s.wave_label ? `${s.title} · ${s.wave_label}` : s.title, 44)}
+                      {s.status === "closed" ? " (encerrada)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : undefined
+          }
         />
         <EmptyState
           icon={Users}
           title="Ainda sem respostas"
-          description={a.survey.open_access
-            ? "Compartilhe o link aberto da pesquisa para começar a receber respostas."
-            : `${a.invited} ${a.invited === 1 ? "pessoa foi convidada" : "pessoas foram convidadas"}. Os links individuais estão na aba Links.`}
+          description={
+            a.availableSurveys.length > 1
+              ? "Esta empresa tem outras pesquisas — troque no seletor acima para ver os resultados delas."
+              : a.survey.open_access
+                ? "Compartilhe o link aberto da pesquisa para começar a receber respostas."
+                : `${a.invited} ${a.invited === 1 ? "pessoa foi convidada" : "pessoas foram convidadas"}. Os links individuais estão na aba Links.`}
         />
       </>
     );
@@ -257,6 +277,21 @@ export default function Dashboard() {
         }
         actions={
           <>
+            {a.availableSurveys.length > 1 && (
+              <Select value={surveyId || a.survey.id} onValueChange={(v) => { setSurveyId(v); setLeaderFilter("all"); }}>
+                <SelectTrigger className="h-9 w-64 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {a.availableSurveys.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {truncate(s.wave_label ? `${s.title} · ${s.wave_label}` : s.title, 44)}
+                      {s.status === "closed" ? " (encerrada)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {leaderOptions.length > 0 && (
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />

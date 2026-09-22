@@ -21,6 +21,7 @@ import {
   Users, X, FileText, Layers, Info,
 } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/PageHeader";
+import { NEW_COLUMNS, writeCompat } from "@/lib/dbCompat";
 
 interface ContextType { company: { id: string } }
 interface Leader { name: string; type: "company" | "department"; hidden?: boolean }
@@ -94,9 +95,25 @@ export default function SurveyConfig() {
   const patchSurvey = async (patch: Record<string, unknown>, message?: string) => {
     if (!selected) return;
     setSelected({ ...selected, ...patch });
-    const { error } = await supabase.from("surveys").update(patch as never).eq("id", selected.id);
+    // Prazo e rodada vêm da migração mais nova; enquanto ela não roda, o
+    // adaptador salva o resto em vez de recusar a gravação inteira.
+    const { error, dropped } = await writeCompat(patch, [...NEW_COLUMNS.surveys],
+      (body) => supabase.from("surveys").update(body as never).eq("id", selected.id));
     if (error) {
       toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" });
+      load();
+      return;
+    }
+    if (dropped.length) {
+      // Dizer que salvou seria mentira: o campo existe na tela, mas ainda não
+      // no banco. Some quando a atualização do banco for aplicada.
+      toast({
+        title: "Este campo ainda não pode ser salvo",
+        description:
+          "Prazo e rodada dependem de uma atualização do banco que ainda não foi aplicada. " +
+          "O resto da configuração foi salvo normalmente.",
+        variant: "destructive",
+      });
       load();
       return;
     }

@@ -19,6 +19,7 @@ import {
 import { PageHeader, EmptyState } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { submissionKey, type ResponseRow } from "@/lib/climate";
+import { NEW_COLUMNS, selectCompat, writeCompat } from "@/lib/dbCompat";
 
 interface ContextType { company: { id: string; slug: string } }
 
@@ -77,11 +78,13 @@ export default function Tracking() {
     if (!s) { setLoading(false); return; }
 
     const [resp, ppl] = await Promise.all([
-      supabase
-        .from("survey_responses")
-        .select("question_id, value, department, company_leadership, department_leadership, evaluated_leader, submitted_at, submission_id")
-        .eq("survey_id", s.id)
-        .order("submitted_at", { ascending: false }),
+      selectCompat<ResponseRow>(
+        ["question_id", "value", "department", "company_leadership",
+         "department_leadership", "evaluated_leader", "submitted_at"],
+        [...NEW_COLUMNS.responses],
+        (cols) => supabase.from("survey_responses").select(cols)
+          .eq("survey_id", s.id).order("submitted_at", { ascending: false }),
+      ),
       supabase.from("respondents").select("*").eq("survey_id", s.id).order("name"),
     ]);
     setResponses((resp.data || []) as ResponseRow[]);
@@ -214,11 +217,10 @@ export default function Tracking() {
       return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("respondents")
-      .update({ last_reminder_at: now })
-      .in("id", pending.map((p) => p.id));
+    const { error } = await writeCompat(
+      { last_reminder_at: new Date().toISOString() }, ["last_reminder_at"],
+      (body) => supabase.from("respondents").update(body as never).in("id", pending.map((p) => p.id)),
+    );
 
     toast({
       title: `${pending.length} ${pending.length === 1 ? "pendente copiado" : "pendentes copiados"}`,

@@ -14,6 +14,7 @@ import { BarChart3, Building2, Download, Gauge, Layers, Trophy, UsersRound } fro
 import ExportReportDialog, { type ReportSection } from "@/components/ExportReportDialog";
 import { PageHeader, EmptyState, PrivacyNote } from "@/components/PageHeader";
 import { StatCard, ScoreRing } from "@/components/StatCard";
+import { NEW_COLUMNS, selectCompat } from "@/lib/dbCompat";
 import {
   MIN_GROUP, climateBand, countPeople, groupByWithPrivacy, round2,
   scoreColor, scoreFromAverage, truncate, type ResponseRow,
@@ -100,9 +101,12 @@ export default function PlatformAnalytics() {
     (async () => {
       setLoading(true);
       const [resp, people, secs] = await Promise.all([
-        supabase.from("survey_responses")
-          .select("survey_id, question_id, value, text_value, department, company_leadership, department_leadership, evaluated_leader, submitted_at, submission_id")
-          .in("survey_id", ids),
+        selectCompat<ResponseRow & { survey_id: string }>(
+          ["survey_id", "question_id", "value", "text_value", "department",
+           "company_leadership", "department_leadership", "evaluated_leader", "submitted_at"],
+          [...NEW_COLUMNS.responses],
+          (cols) => supabase.from("survey_responses").select(cols).in("survey_id", ids),
+        ),
         supabase.from("respondents").select("status").in("survey_id", ids),
         supabase.from("survey_sections").select("id, title").in("survey_id", ids).order("sort_order"),
       ]);

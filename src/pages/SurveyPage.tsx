@@ -12,6 +12,7 @@ import {
   Loader2, RefreshCw, ShieldCheck, UserX, WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NEW_COLUMNS, writeCompat, writeManyCompat } from "@/lib/dbCompat";
 
 /**
  * A pesquisa como o colaborador a responde.
@@ -329,10 +330,8 @@ export default function SurveyPage() {
     // Marca que a pessoa abriu a pesquisa — alimenta o "começou e não terminou"
     // no acompanhamento, que antes não existia.
     if (resp?.id && !resp.started_at) {
-      supabase.from("respondents")
-        .update({ started_at: new Date().toISOString() })
-        .eq("id", resp.id)
-        .then(undefined, () => { /* não é crítico */ });
+      void writeCompat({ started_at: new Date().toISOString() }, ["started_at"],
+        (body) => supabase.from("respondents").update(body as never).eq("id", resp.id));
     }
   }, [slug, token, draftKey]);
 
@@ -434,13 +433,11 @@ export default function SurveyPage() {
       try {
         const ctrl = new AbortController();
         const timeout = setTimeout(() => ctrl.abort(), 30000);
-        let { error } = await supabase.from("survey_responses").insert(rows).abortSignal(ctrl.signal);
+        // Sem a migração, `submission_id` não existe; o adaptador reenvia sem
+        // ela em vez de perder a resposta da pessoa.
+        const { error } = await writeManyCompat(rows, [...NEW_COLUMNS.responses],
+          (body) => supabase.from("survey_responses").insert(body as never).abortSignal(ctrl.signal));
         clearTimeout(timeout);
-        // Banco ainda sem a coluna nova: reenvia sem ela.
-        if (error && /submission_id/.test(error.message)) {
-          const legacy = rows.map(({ submission_id, ...rest }) => rest);
-          ({ error } = await supabase.from("survey_responses").insert(legacy));
-        }
         if (error) { lastError = error; continue; }
         lastError = null;
         break;
@@ -467,16 +464,16 @@ export default function SurveyPage() {
     const stillMissing = updated.some((r) => !r.completed) || (pendingDeptSelection && !selectedDeptLeader);
 
     if (respondent.id) {
-      const patch = {
-        completed_rounds: completedKeys,
-        ...(stillMissing ? {} : { status: "responded", responded_at: new Date().toISOString() }),
-      };
-      const { error } = await supabase.from("respondents").update(patch).eq("id", respondent.id);
-      if (error && /completed_rounds/.test(error.message) && !stillMissing) {
-        await supabase.from("respondents")
-          .update({ status: "responded", responded_at: new Date().toISOString() })
-          .eq("id", respondent.id);
-      }
+      // Sem a migração, `completed_rounds` não existe. O adaptador retira a
+      // coluna e grava o resto — marcar "respondeu" é o que não pode faltar.
+      await writeCompat(
+        {
+          completed_rounds: completedKeys,
+          ...(stillMissing ? {} : { status: "responded", responded_at: new Date().toISOString() }),
+        },
+        ["completed_rounds"],
+        (body) => supabase.from("respondents").update(body as never).eq("id", respondent.id),
+      );
     }
 
     setAnswers({});

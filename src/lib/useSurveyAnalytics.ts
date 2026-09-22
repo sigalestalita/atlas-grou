@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { NEW_COLUMNS, selectCompat } from "@/lib/dbCompat";
 import {
   MIN_GROUP, computeEnps, consensus, countPeople, distribution,
   groupByWithPrivacy, round2, scoreFromAverage, submissionKey,
@@ -116,6 +117,13 @@ export interface Analytics {
   /** Envios por dia, para a curva de participação. */
   timeline: { date: string; count: number }[];
 
+  /**
+   * Todas as pesquisas da empresa que já saíram do rascunho, da mais recente
+   * para a mais antiga. O painel mostra uma por vez; sem esta lista, as
+   * rodadas anteriores ficavam invisíveis — não havia como chegar nelas.
+   */
+  availableSurveys: { id: string; title: string; status: string; created_at: string; wave_label: string | null }[];
+
   reload: () => void;
 }
 
@@ -125,6 +133,7 @@ const EMPTY: Omit<Analytics, "reload"> = {
   overallAvg: 0, overallScore: 0, enps: null,
   questionStats: [], departments: { groups: [], suppressed: 0 }, leaders: [],
   leadersSuppressed: 0, sectionsBySide: [], textAnswers: [], timeline: [],
+  availableSurveys: [],
 };
 
 function parseLeaders(raw: unknown): SurveyInfo["leaders"] {
@@ -174,20 +183,26 @@ export function useSurveyAnalytics(
           .eq("id", companyId)
           .single();
 
-        // A pesquisa em foco: a pedida, ou a mais recente que já saiu do rascunho.
-        let surveyQuery = supabase
+        // Todas as pesquisas que já saíram do rascunho, não só a última: é o
+        // que permite abrir uma rodada anterior em vez de só a mais recente.
+        const { data: surveyRows } = await supabase
           .from("surveys")
           .select("*")
           .eq("company_id", companyId)
           .in("status", ["active", "closed"])
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (surveyId) surveyQuery = supabase.from("surveys").select("*").eq("id", surveyId).limit(1);
+          .order("created_at", { ascending: false });
 
-        const { data: surveyRows } = await surveyQuery;
-        const s = surveyRows?.[0];
+        const availableSurveys = (surveyRows || []).map((r) => ({
+          id: r.id, title: r.title, status: r.status, created_at: r.created_at,
+          wave_label: (r as any).wave_label ?? null,
+        }));
+
+        // A pedida, ou a mais recente.
+        const s = (surveyId && surveyRows?.find((r) => r.id === surveyId)) || surveyRows?.[0];
         if (!s) {
-          if (!cancelled) setState({ ...EMPTY, loading: false, company: (company as any) ?? null });
+          if (!cancelled) {
+            setState({ ...EMPTY, loading: false, company: (company as any) ?? null, availableSurveys });
+          }
           return;
         }
 
@@ -231,35 +246,32 @@ export function useSurveyAnalytics(
         });
         const questionById = new Map(questions.map((q) => [q.id, q]));
 
-        // Respostas.
-        let respQuery = supabase
-          .from("survey_responses")
-          .select("question_id, value, text_value, department, company_leadership, department_leadership, evaluated_leader, submitted_at, submission_id")
-          .eq("survey_id", survey.id);
-        if (leaderFilter !== "all") respQuery = respQuery.eq("evaluated_leader", leaderFilter);
-        if (departmentFilter !== "all") respQuery = respQuery.eq("department", departmentFilter);
-        let { data: respRows, error: respErr } = await respQuery;
-
-        // `submission_id` só existe depois da migração; sem ela, relê sem a coluna.
-        if (respErr && /submission_id/.test(respErr.message)) {
-          let retry = supabase
-            .from("survey_responses")
-            .select("question_id, value, text_value, department, company_leadership, department_leadership, evaluated_leader, submitted_at")
-            .eq("survey_id", survey.id);
-          if (leaderFilter !== "all") retry = retry.eq("evaluated_leader", leaderFilter);
-          if (departmentFilter !== "all") retry = retry.eq("department", departmentFilter);
-          const r = await retry;
-          respRows = r.data as any;
-          respErr = r.error;
-        }
+        // Respostas. `submission_id` só existe depois da migração; sem ela,
+        // a consulta inteira seria recusada e a tela ficaria vazia.
+        const RESPONSE_COLS = [
+          "question_id", "value", "text_value", "department",
+          "company_leadership", "department_leadership", "evaluated_leader", "submitted_at",
+        ];
+        const { data: respRows, error: respErr } = await selectCompat(
+          RESPONSE_COLS, [...NEW_COLUMNS.responses],
+          (cols) => {
+            let q = supabase.from("survey_responses").select(cols).eq("survey_id", survey.id);
+            if (leaderFilter !== "all") q = q.eq("evaluated_leader", leaderFilter);
+            if (departmentFilter !== "all") q = q.eq("department", departmentFilter);
+            return q;
+          },
+        );
         if (respErr) throw new Error(respErr.message);
 
-        const responses = (respRows || []) as ResponseRow[];
+        const responses = (respRows ?? []) as ResponseRow[];
 
         // Participação.
-        const { data: respondents } = await supabase
-          .from("respondents").select("status, responded_at, started_at")
-          .eq("survey_id", survey.id);
+        // `started_at` idem: sem o adaptador, a consulta falharia inteira e a
+        // participação apareceria zerada mesmo com gente tendo respondido.
+        const { data: respondents } = await selectCompat<{ status: string; responded_at: string | null; started_at?: string | null }>(
+          ["status", "responded_at"], ["started_at"],
+          (cols) => supabase.from("respondents").select(cols).eq("survey_id", survey.id),
+        );
         const invited = respondents?.length ?? 0;
         const respondedTracked = respondents?.filter((r) => r.status === "responded").length ?? 0;
         const started = respondents?.filter((r) => (r as any).started_at && r.status !== "responded").length ?? 0;
@@ -415,7 +427,7 @@ export function useSurveyAnalytics(
           questionStats,
           departments: { groups: departments.groups, suppressed: departments.suppressed },
           leaders, leadersSuppressed: leaderGroups.suppressed,
-          sectionsBySide, textAnswers, timeline,
+          sectionsBySide, textAnswers, timeline, availableSurveys,
         });
       } catch (e: unknown) {
         if (cancelled) return;

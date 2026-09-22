@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, MessageSquare, Radio, Search, ShieldCheck } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/PageHeader";
 import { scoreColor, submissionKey, truncate, type ResponseRow } from "@/lib/climate";
+import { NEW_COLUMNS, selectCompat } from "@/lib/dbCompat";
 
 interface ContextType { company: { id: string } }
 
@@ -70,9 +71,12 @@ export default function Responses() {
     if (!s) { setLoading(false); return; }
 
     const [resp, secs] = await Promise.all([
-      supabase.from("survey_responses")
-        .select("question_id, value, text_value, department, company_leadership, department_leadership, evaluated_leader, submitted_at, submission_id")
-        .eq("survey_id", s.id),
+      selectCompat<ResponseRow>(
+        ["question_id", "value", "text_value", "department", "company_leadership",
+         "department_leadership", "evaluated_leader", "submitted_at"],
+        [...NEW_COLUMNS.responses],
+        (cols) => supabase.from("survey_responses").select(cols).eq("survey_id", s.id),
+      ),
       supabase.from("survey_sections")
         .select("id, title, sort_order, survey_questions(id, text, question_type, scale_type, sort_order)")
         .eq("survey_id", s.id).order("sort_order"),
