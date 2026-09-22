@@ -32,7 +32,6 @@ export default function CompanyView() {
     { label: 'Colaboradores', path: 'respondents', icon: Users },
     { label: 'Avaliações', path: 'evaluations', icon: UserCheck },
     { label: 'Links', path: 'links', icon: Link2 },
-    { label: 'Progresso', path: 'progress', icon: BarChart3 },
     { label: 'Acompanhamento', path: 'tracking', icon: Activity },
     { label: 'Respostas', path: 'responses', icon: MessageSquare },
     { label: 'Exportar', path: 'export', icon: Download },

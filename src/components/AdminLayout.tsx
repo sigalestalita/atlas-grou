@@ -71,7 +71,6 @@ const COMPANY_ADMIN_GROUPS: NavGroup[] = [
   {
     label: "Campo",
     items: [
-      { title: "Progresso", url: "/admin/progress", icon: BarChart3 },
       { title: "Acompanhamento", url: "/admin/tracking", icon: Activity },
     ],
   },

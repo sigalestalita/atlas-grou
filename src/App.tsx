@@ -19,7 +19,6 @@ import Dashboard from "@/pages/admin/Dashboard";
 import SurveyConfig from "@/pages/admin/SurveyConfig";
 import Respondents from "@/pages/admin/Respondents";
 import Links from "@/pages/admin/Links";
-import ProgressPage from "@/pages/admin/Progress";
 import Responses from "@/pages/admin/Responses";
 import Tracking from "@/pages/admin/Tracking";
 import ExportPage from "@/pages/admin/Export";
@@ -78,7 +77,7 @@ const App = () => (
                 <Route path="respondents" element={<Respondents />} />
                 <Route path="evaluations" element={<EvaluationMatrix />} />
                 <Route path="links" element={<Links />} />
-                <Route path="progress" element={<ProgressPage />} />
+                <Route path="progress" element={<Navigate to="../tracking" replace />} />
                 <Route path="tracking" element={<Tracking />} />
                 <Route path="responses" element={<Responses />} />
                 <Route path="export" element={<ExportPage />} />
@@ -91,7 +90,7 @@ const App = () => (
               <Route path="survey" element={<SurveyConfig />} />
               <Route path="respondents" element={<Respondents />} />
               <Route path="links" element={<Links />} />
-              <Route path="progress" element={<ProgressPage />} />
+              <Route path="progress" element={<Navigate to="/admin/tracking" replace />} />
               <Route path="tracking" element={<Tracking />} />
               <Route path="responses" element={<Responses />} />
               <Route path="export" element={<ExportPage />} />
