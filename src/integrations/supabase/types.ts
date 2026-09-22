@@ -132,6 +132,9 @@ export type Database = {
       }
       respondents: {
         Row: {
+          last_reminder_at: string | null
+          reminder_count: number
+          started_at: string | null
           company_id: string
           company_leadership: string | null
           created_at: string
@@ -146,6 +149,9 @@ export type Database = {
           token: string
         }
         Insert: {
+          last_reminder_at?: string | null
+          reminder_count?: number
+          started_at?: string | null
           company_id: string
           company_leadership?: string | null
           created_at?: string
@@ -160,6 +166,9 @@ export type Database = {
           token: string
         }
         Update: {
+          last_reminder_at?: string | null
+          reminder_count?: number
+          started_at?: string | null
           company_id?: string
           company_leadership?: string | null
           created_at?: string
@@ -239,6 +248,7 @@ export type Database = {
       }
       survey_responses: {
         Row: {
+          submission_id: string | null
           company_leadership: string | null
           department: string | null
           department_leadership: string | null
@@ -251,6 +261,7 @@ export type Database = {
           value: number | null
         }
         Insert: {
+          submission_id?: string | null
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
@@ -263,6 +274,7 @@ export type Database = {
           value?: number | null
         }
         Update: {
+          submission_id?: string | null
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
@@ -328,6 +340,9 @@ export type Database = {
       }
       surveys: {
         Row: {
+          closes_at: string | null
+          opens_at: string | null
+          wave_label: string | null
           company_id: string | null
           created_at: string
           description: string | null
@@ -344,6 +359,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          closes_at?: string | null
+          opens_at?: string | null
+          wave_label?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
@@ -360,6 +378,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          closes_at?: string | null
+          opens_at?: string | null
+          wave_label?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
