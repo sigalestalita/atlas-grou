@@ -132,6 +132,7 @@ export type Database = {
       }
       respondents: {
         Row: {
+          completed_rounds: Json
           last_reminder_at: string | null
           reminder_count: number
           started_at: string | null
@@ -149,6 +150,7 @@ export type Database = {
           token: string
         }
         Insert: {
+          completed_rounds?: Json
           last_reminder_at?: string | null
           reminder_count?: number
           started_at?: string | null
@@ -166,6 +168,7 @@ export type Database = {
           token: string
         }
         Update: {
+          completed_rounds?: Json
           last_reminder_at?: string | null
           reminder_count?: number
           started_at?: string | null

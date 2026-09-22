@@ -1,14 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Clock, ArrowRight, ArrowLeft, Shield, Users, UserX } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock,
+  Loader2, RefreshCw, ShieldCheck, UserX, WifiOff,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * A pesquisa como o colaborador a responde.
+ *
+ * É a única tela do produto que é white-label de verdade: as cores vêm da
+ * empresa cliente e são injetadas como variáveis CSS no container, para que
+ * os componentes usem `var(--c-primary)` em vez de carregar estilo inline em
+ * cada botão. O layout, o espaçamento e a tipografia são os mesmos do resto
+ * da plataforma.
+ *
+ * Uma pergunta por vez, mobile-first — o telefone é o canal principal.
+ */
 
 interface Question {
   id: string;
@@ -27,996 +42,947 @@ interface SurveyData {
   id: string;
   title: string;
   description: string | null;
+  intro_text: string | null;
   scale_min: number;
   scale_max: number;
   scale_labels: string[];
-  leaders: { name: string; type: 'company' | 'department'; hidden?: boolean }[];
+  closes_at: string | null;
+  leaders: { name: string; type: "company" | "department"; hidden?: boolean }[];
 }
 
-interface CompanyBranding {
+interface Branding {
   name: string;
   logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
+  primary: string;
+  secondary: string;
 }
 
-interface EvaluationRound {
-  leaderName: string | null; // null = org round
-  roundType: 'org' | 'leadership';
+interface Round {
+  /** `null` = etapa sobre a organização. */
+  leaderName: string | null;
+  type: "org" | "leadership";
   completed: boolean;
 }
 
-type SurveyStatus = 'loading' | 'select_dept_leader' | 'round_intro' | 'ready' | 'already_responded' | 'invalid' | 'submitting' | 'round_done' | 'done' | 'no_evaluation';
-
+type Status =
+  | "loading" | "invalid" | "closed" | "already_responded" | "no_evaluation"
+  | "select_dept_leader" | "round_intro" | "ready" | "submitting" | "round_done" | "done";
 
 const SCALE_LABELS: Record<string, string[]> = {
-  avaliacao: ['Muito Ruim', 'Ruim', 'Regular', 'Bom', 'Muito Bom'],
-  satisfacao: ['Muito Insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito Satisfeito'],
-  concordancia: ['Discordo totalmente', 'Discordo parcialmente', 'Neutro', 'Concordo parcialmente', 'Concordo totalmente'],
-  frequencia: ['Nunca', 'Raramente', 'Às vezes', 'Frequentemente', 'Sempre'],
-  confianca: ['Muito Baixo', 'Baixo', 'Moderado', 'Alto', 'Muito Alto'],
-  alinhamento: ['Totalmente Desalinhado', 'Pouco Alinhado', 'Parcialmente', 'Bem Alinhado', 'Totalmente Alinhado'],
+  avaliacao: ["Muito ruim", "Ruim", "Regular", "Bom", "Muito bom"],
+  satisfacao: ["Muito insatisfeito", "Insatisfeito", "Neutro", "Satisfeito", "Muito satisfeito"],
+  concordancia: ["Discordo totalmente", "Discordo em parte", "Neutro", "Concordo em parte", "Concordo totalmente"],
+  frequencia: ["Nunca", "Raramente", "Às vezes", "Com frequência", "Sempre"],
+  confianca: ["Muito baixo", "Baixo", "Moderado", "Alto", "Muito alto"],
+  alinhamento: ["Totalmente desalinhado", "Pouco alinhado", "Em parte", "Bem alinhado", "Totalmente alinhado"],
 };
+
+/** ~14s por pergunta — medido em pesquisas de escala com uma pergunta por tela. */
+const SECONDS_PER_QUESTION = 14;
+
+/** Identifica uma etapa de forma estável, para saber o que já foi enviado. */
+const roundKey = (r: Round) => (r.type === "org" ? "org" : `leader:${r.leaderName}`);
 
 export default function SurveyPage() {
   const { slug, token } = useParams();
-  const [status, setStatus] = useState<SurveyStatus>('loading');
+
+  const [status, setStatus] = useState<Status>("loading");
   const [survey, setSurvey] = useState<SurveyData | null>(null);
-  const [branding, setBranding] = useState<CompanyBranding | null>(null);
+  const [branding, setBranding] = useState<Branding | null>(null);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [respondent, setRespondent] = useState<any>(null);
+
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [roundIndex, setRoundIndex] = useState(0);
+  const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [justifications, setJustifications] = useState<Record<string, string>>({});
-  const [respondent, setRespondent] = useState<any>(null);
+
+  const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
+  const [pendingDeptSelection, setPendingDeptSelection] = useState(false);
+
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const liveRegion = useRef<HTMLDivElement>(null);
 
-  // Multi-round evaluation state
-  const [evaluationRounds, setEvaluationRounds] = useState<EvaluationRound[]>([]);
-  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const round = rounds[roundIndex];
+  const questions = useMemo(
+    () => round?.type === "leadership"
+      ? allQuestions.filter((q) => q.section_type === "leadership")
+      : allQuestions.filter((q) => q.section_type !== "leadership"),
+    [allQuestions, round?.type],
+  );
 
-  // Department leader selection
-  const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
-  const [respondentRole, setRespondentRole] = useState<'collaborator' | 'department_leader' | 'company_leader'>('collaborator');
-  const [pendingDeptLeaderSelection, setPendingDeptLeaderSelection] = useState(false);
+  const draftKey = token ? `atlas_draft_${token}` : null;
 
-  // Current round's questions
-  const currentRound = evaluationRounds[currentRoundIndex];
-  const questions = currentRound?.roundType === 'leadership'
-    ? allQuestions.filter(q => q.section_type === 'leadership')
-    : allQuestions.filter(q => q.section_type !== 'leadership');
-
-  // localStorage key for draft persistence (per token)
-  const draftKey = token ? `survey_draft_${token}` : null;
-
-  // Persist draft to localStorage whenever answers/justifications change
+  // ── Rascunho ───────────────────────────────────────────────────────────────
+  // Salvo a cada mudança. É o que permite fechar o navegador no meio da
+  // pesquisa e voltar de onde parou, sem ter que refazer nada.
   useEffect(() => {
     if (!draftKey) return;
-    if (status === 'loading' || status === 'invalid' || status === 'already_responded' || status === 'done' || status === 'no_evaluation') return;
+    if (["loading", "invalid", "closed", "already_responded", "done", "no_evaluation"].includes(status)) return;
     try {
       localStorage.setItem(draftKey, JSON.stringify({
-        answers, justifications, currentIndex, currentRoundIndex,
-        selectedDeptLeader, savedAt: Date.now(),
+        answers, justifications, index, roundIndex, selectedDeptLeader,
+        completed: rounds.filter((r) => r.completed).map(roundKey),
+        savedAt: Date.now(),
       }));
-    } catch {}
-  }, [answers, justifications, currentIndex, currentRoundIndex, selectedDeptLeader, status, draftKey]);
+    } catch { /* modo privado ou cota cheia: seguir sem rascunho */ }
+  }, [answers, justifications, index, roundIndex, selectedDeptLeader, rounds, status, draftKey]);
 
-  // Warn before unload when there are unsaved answers
-  useEffect(() => {
-    const hasUnsaved = Object.keys(answers).length > 0 &&
-      status !== 'done' && status !== 'already_responded' && status !== 'no_evaluation' && status !== 'invalid';
-    if (!hasUnsaved) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [answers, status]);
+  // ── Carga ──────────────────────────────────────────────────────────────────
+  const load = useCallback(async () => {
+    if (!slug) { setStatus("invalid"); return; }
 
-  useEffect(() => { loadSurvey(); }, [slug, token]);
+    const { data: company } = await supabase
+      .from("companies").select("*").eq("slug", slug).single();
+    if (!company) { setStatus("invalid"); return; }
+    setBranding({
+      name: company.name, logo_url: company.logo_url,
+      primary: company.primary_color || "#15498D",
+      secondary: company.secondary_color || "#071A34",
+    });
 
-  const loadSurvey = async () => {
-    if (!slug) { setStatus('invalid'); return; }
-
-    const { data: company } = await supabase.from('companies').select('*').eq('slug', slug).single();
-    if (!company) { setStatus('invalid'); return; }
-    setBranding({ name: company.name, logo_url: company.logo_url, primary_color: company.primary_color, secondary_color: company.secondary_color });
-
-    let surveyData: any = null;
+    let surveyRow: any = null;
     let resp: any = null;
 
     if (token) {
-      const { data: respData } = await supabase.from('respondents').select('*').eq('token', token).single();
-      if (!respData) { setStatus('invalid'); return; }
-      if (respData.status === 'responded') { setStatus('already_responded'); return; }
-      resp = respData;
-      setRespondent(resp);
-
-      const { data: sd } = await supabase.from('surveys').select('*').eq('id', resp.survey_id).eq('status', 'active').single();
-      surveyData = sd;
+      const { data } = await supabase.from("respondents").select("*").eq("token", token).single();
+      if (!data) { setStatus("invalid"); return; }
+      if (data.status === "responded") { setStatus("already_responded"); return; }
+      resp = data;
+      setRespondent(data);
+      const { data: s } = await supabase
+        .from("surveys").select("*").eq("id", data.survey_id).eq("status", "active").single();
+      surveyRow = s;
     } else {
-      const { data: sd } = await supabase.from('surveys').select('*').eq('company_id', company.id).eq('status', 'active').eq('open_access', true).order('created_at', { ascending: false }).limit(1).single();
-      surveyData = sd;
-      if (surveyData) {
-        resp = { id: null, survey_id: surveyData.id, name: '', department: null, company_leadership: null, department_leadership: null };
+      const { data: s } = await supabase
+        .from("surveys").select("*")
+        .eq("company_id", company.id).eq("status", "active").eq("open_access", true)
+        .order("created_at", { ascending: false }).limit(1).single();
+      surveyRow = s;
+      if (s) {
+        resp = { id: null, survey_id: s.id, name: "", department: null, company_leadership: null, department_leadership: null, completed_rounds: [] };
         setRespondent(resp);
       }
     }
 
-    if (!surveyData) { setStatus('invalid'); return; }
+    if (!surveyRow) { setStatus("invalid"); return; }
 
-    let labels: string[] = [];
-    try {
-      labels = typeof surveyData.scale_labels === 'string' ? JSON.parse(surveyData.scale_labels) : Array.isArray(surveyData.scale_labels) ? surveyData.scale_labels as string[] : [];
-    } catch { labels = []; }
-
-    let leaders: { name: string; type: 'company' | 'department'; hidden?: boolean }[] = [];
-    try {
-      const raw = surveyData.leaders;
-      if (Array.isArray(raw)) {
-        leaders = raw.map((l: any) => ({ name: l.name || l, type: l.type || 'company', hidden: !!l.hidden }));
-      }
-    } catch { leaders = []; }
-
-    const surveyParsed: SurveyData = { ...surveyData, scale_labels: labels, leaders } as any;
-    setSurvey(surveyParsed);
-
-    // Load questions with section_type
-    const { data: sections } = await supabase.from('survey_sections').select('*').eq('survey_id', surveyData.id).order('sort_order');
-    const loadedQuestions: Question[] = [];
-    for (const sec of sections || []) {
-      const { data: qs } = await supabase.from('survey_questions').select('*').eq('section_id', sec.id).order('sort_order');
-      (qs || []).forEach(q => {
-        let opts: string[] | null = null;
-        if (q.options) {
-          try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options as string[]; } catch { opts = null; }
-        }
-        loadedQuestions.push({
-          id: q.id, text: q.text, section_title: sec.title, section_id: sec.id,
-          section_type: (sec as any).section_type || 'organization',
-          question_type: q.question_type, scale_type: q.scale_type,
-          options: opts, has_justification: q.has_justification,
-          justification_prompt: q.justification_prompt,
-        });
-      });
-    }
-    setAllQuestions(loadedQuestions);
-
-    const hasLeadershipQuestions = loadedQuestions.some(q => q.section_type === 'leadership');
-
-    // Determine respondent role
-    const companyLeaders = leaders.filter(l => l.type === 'company');
-    const deptLeaders = leaders.filter(l => l.type === 'department');
-    const respondentName = resp.name?.trim().toLowerCase() || '';
-
-    const isCompanyLeader = companyLeaders.some(l => l.name.trim().toLowerCase() === respondentName);
-    const isDeptLeader = deptLeaders.some(l => l.name.trim().toLowerCase() === respondentName);
-
-    if (isCompanyLeader) {
-      setRespondentRole('company_leader');
-      setStatus('no_evaluation');
+    // Prazo: a pesquisa pode estar ativa e mesmo assim fora da janela.
+    const closesAt = (surveyRow as any).closes_at as string | null;
+    const opensAt = (surveyRow as any).opens_at as string | null;
+    const now = Date.now();
+    if ((closesAt && new Date(closesAt).getTime() < now) || (opensAt && new Date(opensAt).getTime() > now)) {
+      setStatus("closed");
       return;
     }
+
+    const labels: string[] = (() => {
+      try {
+        const raw = surveyRow.scale_labels;
+        if (typeof raw === "string") return JSON.parse(raw);
+        return Array.isArray(raw) ? (raw as string[]) : [];
+      } catch { return []; }
+    })();
+
+    const leaders: SurveyData["leaders"] = (() => {
+      try {
+        const raw = Array.isArray(surveyRow.leaders) ? surveyRow.leaders : [];
+        return raw.map((l: any) =>
+          typeof l === "string"
+            ? { name: l, type: "company" as const }
+            : { name: l.name, type: l.type || "company", hidden: !!l.hidden },
+        ).filter((l: any) => l.name);
+      } catch { return []; }
+    })();
+
+    setSurvey({
+      id: surveyRow.id, title: surveyRow.title, description: surveyRow.description,
+      intro_text: (surveyRow as any).intro_text ?? null,
+      scale_min: surveyRow.scale_min, scale_max: surveyRow.scale_max,
+      scale_labels: labels, closes_at: closesAt, leaders,
+    });
+
+    // Perguntas: duas consultas, não uma por seção.
+    const { data: sections } = await supabase
+      .from("survey_sections").select("*").eq("survey_id", surveyRow.id).order("sort_order");
+    const secById = new Map((sections || []).map((s) => [s.id, s]));
+    const { data: qRows } = sections?.length
+      ? await supabase.from("survey_questions").select("*")
+          .in("section_id", sections.map((s) => s.id)).order("sort_order")
+      : { data: [] as any[] };
+
+    const loaded: Question[] = (qRows || []).map((q) => {
+      const sec = secById.get(q.section_id);
+      let options: string[] | null = null;
+      if (q.options) {
+        try { options = typeof q.options === "string" ? JSON.parse(q.options) : (q.options as string[]); }
+        catch { options = null; }
+      }
+      return {
+        id: q.id, text: q.text,
+        section_title: sec?.title ?? "", section_id: q.section_id,
+        section_type: (sec as any)?.section_type || "organization",
+        question_type: q.question_type, scale_type: q.scale_type, options,
+        has_justification: q.has_justification, justification_prompt: q.justification_prompt,
+      };
+    });
+    // Mantém a ordem das seções, e dentro delas a ordem das perguntas.
+    const secOrder = new Map((sections || []).map((s, i) => [s.id, i]));
+    loaded.sort((a, b) => (secOrder.get(a.section_id)! - secOrder.get(b.section_id)!));
+    setAllQuestions(loaded);
+
+    const hasLeadershipQuestions = loaded.some((q) => q.section_type === "leadership");
+    const companyLeaders = leaders.filter((l) => l.type === "company");
+    const deptLeaders = leaders.filter((l) => l.type === "department");
+    const myName = (resp.name || "").trim().toLowerCase();
+
+    // Liderança empresarial não se autoavalia e não avalia par.
+    if (companyLeaders.some((l) => l.name.trim().toLowerCase() === myName)) {
+      setStatus("no_evaluation");
+      return;
+    }
+
+    const isDeptLeader = deptLeaders.some((l) => l.name.trim().toLowerCase() === myName);
+
+    let built: Round[];
+    let needsDeptSelection = false;
 
     if (isDeptLeader) {
-      setRespondentRole('department_leader');
-      // Dept leaders: org questions first, then evaluate company leaders
-      const rounds: EvaluationRound[] = [
-        { leaderName: null, roundType: 'org', completed: false },
-        ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
+      // Líder de área: responde sobre a organização e avalia a liderança acima.
+      built = [
+        { leaderName: null, type: "org", completed: false },
+        ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
       ];
-      setEvaluationRounds(rounds);
-      setCurrentRoundIndex(0);
-      setStatus('round_intro');
-      return;
-    }
-
-    // Collaborator
-    setRespondentRole('collaborator');
-    if (deptLeaders.length > 0 && hasLeadershipQuestions) {
-      // Start with org round; dept leader selection will appear after org round completes
-      setPendingDeptLeaderSelection(true);
-      const rounds: EvaluationRound[] = [
-        { leaderName: null, roundType: 'org', completed: false },
-      ];
-      setEvaluationRounds(rounds);
-      setCurrentRoundIndex(0);
-      setStatus('round_intro');
+    } else if (deptLeaders.length > 0 && hasLeadershipQuestions) {
+      // Colaborador: escolhe o líder de área depois da etapa da organização.
+      built = [{ leaderName: null, type: "org", completed: false }];
+      needsDeptSelection = true;
     } else if (hasLeadershipQuestions && companyLeaders.length > 0) {
-      // No dept leaders, org + company leaders
-      const rounds: EvaluationRound[] = [
-        { leaderName: null, roundType: 'org', completed: false },
-        ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
+      built = [
+        { leaderName: null, type: "org", completed: false },
+        ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
       ];
-      setEvaluationRounds(rounds);
-      setCurrentRoundIndex(0);
-      setStatus('round_intro');
     } else {
-      // No leadership questions or no leaders - just org questions
-      const rounds: EvaluationRound[] = [
-        { leaderName: null, roundType: 'org', completed: false },
-      ];
-      setEvaluationRounds(rounds);
-      setCurrentRoundIndex(0);
-      setStatus('round_intro');
+      built = [{ leaderName: null, type: "org", completed: false }];
     }
 
-    // Restore draft from localStorage if present
+    // Etapas já enviadas. Vem do servidor primeiro — o rascunho local não
+    // acompanha a pessoa quando ela troca de aparelho, e sem isso ela refazia
+    // uma etapa já gravada.
+    const serverDone: string[] = (() => {
+      const raw = (resp as any)?.completed_rounds;
+      return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
+    })();
+
+    let draft: any = null;
     if (draftKey) {
       try {
         const raw = localStorage.getItem(draftKey);
-        if (raw) {
-          const draft = JSON.parse(raw);
-          if (draft?.answers) setAnswers(draft.answers);
-          if (draft?.justifications) setJustifications(draft.justifications);
-          if (typeof draft?.currentIndex === 'number') setCurrentIndex(Math.max(0, draft.currentIndex));
-          if (typeof draft?.currentRoundIndex === 'number') setCurrentRoundIndex(Math.max(0, draft.currentRoundIndex));
-          if (draft?.selectedDeptLeader) setSelectedDeptLeader(draft.selectedDeptLeader);
-          // If user had progressed past intro, jump straight back into the questions
-          if (draft?.answers && Object.keys(draft.answers).length > 0) setStatus('ready');
+        if (raw) draft = JSON.parse(raw);
+      } catch { /* rascunho ilegível: começa do zero */ }
+    }
+
+    const done = new Set<string>([...serverDone, ...(Array.isArray(draft?.completed) ? draft.completed : [])]);
+
+    // O líder de área escolhido antes precisa voltar junto, senão as etapas
+    // de liderança não seriam remontadas na retomada.
+    const savedDept: string | null = draft?.selectedDeptLeader ?? null;
+    if (needsDeptSelection && savedDept) {
+      built = [
+        { leaderName: null, type: "org", completed: false },
+        { leaderName: savedDept, type: "leadership", completed: false },
+        ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
+      ];
+      needsDeptSelection = false;
+      setSelectedDeptLeader(savedDept);
+    }
+
+    built = built.map((r) => ({ ...r, completed: done.has(roundKey(r)) }));
+    setRounds(built);
+    setPendingDeptSelection(needsDeptSelection);
+
+    const nextIncomplete = built.findIndex((r) => !r.completed);
+
+    if (nextIncomplete === -1) {
+      // Tudo enviado. Se a etapa de escolha ficou pendente, é ali que ela entra.
+      if (needsDeptSelection) { setStatus("select_dept_leader"); return; }
+      setStatus("done");
+      return;
+    }
+
+    setRoundIndex(nextIncomplete);
+
+    // Restaura o rascunho só se ele for da etapa em que a pessoa parou.
+    // Sem essa checagem, respostas de uma etapa vazavam para a seguinte.
+    const draftIsForThisRound = draft && draft.roundIndex === nextIncomplete;
+    if (draftIsForThisRound && draft.answers && Object.keys(draft.answers).length > 0) {
+      setAnswers(draft.answers);
+      setJustifications(draft.justifications || {});
+      setIndex(Math.max(0, Math.min(draft.index ?? 0, 9999)));
+      setStatus("ready");
+    } else {
+      setStatus("round_intro");
+    }
+
+    // Marca que a pessoa abriu a pesquisa — alimenta o "começou e não terminou"
+    // no acompanhamento, que antes não existia.
+    if (resp?.id && !resp.started_at) {
+      supabase.from("respondents")
+        .update({ started_at: new Date().toISOString() })
+        .eq("id", resp.id)
+        .then(undefined, () => { /* não é crítico */ });
+    }
+  }, [slug, token, draftKey]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── Navegação ──────────────────────────────────────────────────────────────
+  const current = questions[index];
+
+  const isAnswered = useCallback((q: Question) => {
+    const a = answers[q.id];
+    if (a === undefined) return false;
+    if (typeof a === "string" && a.trim() === "") return false;
+    if (q.has_justification && !(justifications[q.id] || "").trim()) return false;
+    return true;
+  }, [answers, justifications]);
+
+  const answeredCount = questions.filter(isAnswered).length;
+  const allAnswered = questions.length > 0 && questions.every(isAnswered);
+  const canAdvance = current ? isAnswered(current) : false;
+  const isLast = index === questions.length - 1;
+
+  const goNext = useCallback(() => {
+    setIndex((i) => Math.min(questions.length - 1, i + 1));
+  }, [questions.length]);
+  const goBack = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
+
+  const answer = useCallback((value: number | string) => {
+    if (!current) return;
+    setAnswers((a) => ({ ...a, [current.id]: value }));
+    if (liveRegion.current) liveRegion.current.textContent = `Resposta registrada: ${value}`;
+    // Avança sozinho só quando não falta nada nesta pergunta. Com justificativa
+    // obrigatória, pular tiraria a pessoa do campo antes de ela escrever.
+    if (!current.has_justification) {
+      window.setTimeout(() => setIndex((i) => (i < questions.length - 1 ? i + 1 : i)), 260);
+    }
+  }, [current, questions.length]);
+
+  // Atalhos de teclado: número responde, setas navegam.
+  // Numa pesquisa de uma pergunta por tela, o mouse é o gargalo.
+  useEffect(() => {
+    if (status !== "ready" || !current) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
+
+      if (e.key === "ArrowLeft") { goBack(); return; }
+      if (e.key === "ArrowRight" || (e.key === "Enter" && canAdvance && !isLast)) { goNext(); return; }
+
+      if (current.question_type === "scale") {
+        const n = Number(e.key);
+        if (!Number.isNaN(n) && e.key !== " ") {
+          const min = current.scale_type === "enps" ? 0 : (survey?.scale_min ?? 1);
+          const max = current.scale_type === "enps" ? 10 : (survey?.scale_max ?? 5);
+          if (n >= min && n <= max) { e.preventDefault(); answer(n); }
         }
-      } catch {}
-    }
-  };
+      } else if (current.question_type === "choice" && current.options) {
+        const i = "abcdefghij".indexOf(e.key.toLowerCase());
+        if (i >= 0 && i < current.options.length) { e.preventDefault(); answer(current.options[i]); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [status, current, canAdvance, isLast, goNext, goBack, answer, survey]);
 
-  const confirmDeptLeaderSelection = () => {
-    if (!selectedDeptLeader || !survey) return;
-    setPendingDeptLeaderSelection(false);
-    const companyLeaders = survey.leaders.filter(l => l.type === 'company');
-    // Leadership rounds: dept leader first, then company leaders
-    const leadershipRounds: EvaluationRound[] = [
-      { leaderName: selectedDeptLeader, roundType: 'leadership', completed: false },
-      ...companyLeaders.map(l => ({ leaderName: l.name, roundType: 'leadership' as const, completed: false })),
-    ];
-    // Append to existing rounds (org already completed)
-    const updatedRounds = [...evaluationRounds, ...leadershipRounds];
-    setEvaluationRounds(updatedRounds);
-    setCurrentRoundIndex(evaluationRounds.length); // first leadership round
-    setStatus('round_intro');
-  };
-
-  const startRound = () => {
-    setAnswers({});
-    setJustifications({});
-    setCurrentIndex(0);
-    setStatus('ready');
-  };
-
-  const handleScaleAnswer = (value: number) => {
-    const q = questions[currentIndex];
-    setAnswers(a => ({ ...a, [q.id]: value }));
-    if (!q.has_justification) {
-      setTimeout(() => { if (currentIndex < questions.length - 1) setCurrentIndex(i => i + 1); }, 400);
-    }
-  };
-
-  const handleChoiceAnswer = (option: string) => {
-    const q = questions[currentIndex];
-    setAnswers(a => ({ ...a, [q.id]: option }));
-    if (!q.has_justification) {
-      setTimeout(() => { if (currentIndex < questions.length - 1) setCurrentIndex(i => i + 1); }, 400);
-    }
-  };
-
+  // ── Envio ──────────────────────────────────────────────────────────────────
   const submitRound = async () => {
-    if (!survey || !respondent) return;
+    if (!survey || !respondent || !round) return;
     setSubmitError(null);
-    setStatus('submitting');
+    setStatus("submitting");
 
-    const currentLeader = currentRound?.leaderName || null;
+    // Sorteado por envio: agrupa as linhas desta etapa sem identificar quem é.
+    const submissionId = crypto.randomUUID();
+    const leader = round.leaderName;
 
-    const responseRows = questions.map(q => {
-      const ans = answers[q.id];
-      const justification = justifications[q.id] || null;
+    const rows = questions.map((q) => {
+      const a = answers[q.id];
+      const justification = (justifications[q.id] || "").trim() || null;
+      let textValue: string | null = null;
+      if (typeof a === "string") textValue = justification ? `${a}|||${justification}` : a;
+      else textValue = justification;
       return {
         survey_id: survey.id,
         question_id: q.id,
-        value: typeof ans === 'number' ? ans : null,
-        text_value: typeof ans === 'string' ? ans : justification,
+        value: typeof a === "number" ? a : null,
+        text_value: textValue,
         department: respondent.department,
         company_leadership: respondent.company_leadership,
         department_leadership: respondent.department_leadership,
-        evaluated_leader: currentLeader,
+        evaluated_leader: leader,
+        submission_id: submissionId,
       };
-    }).filter(r => r.value !== null || r.text_value !== null);
+    }).filter((r) => r.value !== null || r.text_value !== null);
 
-    // Merge justifications for scale/choice answers
-    for (const q of questions) {
-      const justification = justifications[q.id];
-      if (justification && q.has_justification && answers[q.id] !== undefined) {
-        const existingRow = responseRows.find(r => r.question_id === q.id);
-        if (existingRow) {
-          if (typeof answers[q.id] === 'number') {
-            existingRow.text_value = justification;
-          } else {
-            existingRow.text_value = `${answers[q.id]}|||${justification}`;
-          }
-        }
-      }
-    }
-
-    // Retry with backoff: 0s, 2s, 5s. Timeout 30s per attempt.
+    // Três tentativas, com espera crescente. A conexão do celular cai.
     const delays = [0, 2000, 5000];
-    let lastError: any = null;
-    for (let attempt = 0; attempt < delays.length; attempt++) {
-      if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+    let lastError: unknown = null;
+    for (const delay of delays) {
+      if (delay) await new Promise((r) => setTimeout(r, delay));
       try {
         const ctrl = new AbortController();
-        const timeoutId = setTimeout(() => ctrl.abort(), 30000);
-        const insertPromise = supabase.from('survey_responses').insert(responseRows).abortSignal(ctrl.signal);
-        const { error } = await insertPromise;
-        clearTimeout(timeoutId);
+        const timeout = setTimeout(() => ctrl.abort(), 30000);
+        let { error } = await supabase.from("survey_responses").insert(rows).abortSignal(ctrl.signal);
+        clearTimeout(timeout);
+        // Banco ainda sem a coluna nova: reenvia sem ela.
+        if (error && /submission_id/.test(error.message)) {
+          const legacy = rows.map(({ submission_id, ...rest }) => rest);
+          ({ error } = await supabase.from("survey_responses").insert(legacy));
+        }
         if (error) { lastError = error; continue; }
         lastError = null;
         break;
-      } catch (e: any) {
+      } catch (e) {
         lastError = e;
       }
     }
 
     if (lastError) {
-      console.error('Submit error after retries:', lastError);
       setSubmitError(
-        'Não foi possível enviar suas respostas agora. Suas respostas estão salvas no seu navegador. Verifique sua conexão e clique em "Reenviar".'
+        "Não conseguimos enviar agora. Suas respostas estão guardadas neste navegador — " +
+        "confira a conexão e toque em Reenviar.",
       );
-      setStatus('ready');
+      setStatus("ready");
       return;
     }
 
-    // Mark this round as completed
-    const updatedRounds = [...evaluationRounds];
-    updatedRounds[currentRoundIndex] = { ...updatedRounds[currentRoundIndex], completed: true };
-    setEvaluationRounds(updatedRounds);
+    const updated = rounds.map((r, i) => (i === roundIndex ? { ...r, completed: true } : r));
+    setRounds(updated);
 
-    const nextIncomplete = updatedRounds.findIndex((r, i) => i > currentRoundIndex && !r.completed);
-    if (nextIncomplete !== -1) {
-      setCurrentRoundIndex(nextIncomplete);
-      setStatus('round_done');
-    } else if (pendingDeptLeaderSelection && !selectedDeptLeader) {
-      // Org round done, now ask for dept leader selection before leadership rounds
-      setStatus('select_dept_leader');
-    } else {
-      if (respondent.id) {
-        try {
-          await supabase.from('respondents').update({ status: 'responded', responded_at: new Date().toISOString() }).eq('id', respondent.id);
-        } catch (e) { console.error('Failed to mark respondent responded:', e); }
+    // Registra a etapa no servidor: é isso que impede a mesma etapa de ser
+    // enviada de novo se a pessoa voltar de outro aparelho.
+    const completedKeys = updated.filter((r) => r.completed).map(roundKey);
+    const stillMissing = updated.some((r) => !r.completed) || (pendingDeptSelection && !selectedDeptLeader);
+
+    if (respondent.id) {
+      const patch = {
+        completed_rounds: completedKeys,
+        ...(stillMissing ? {} : { status: "responded", responded_at: new Date().toISOString() }),
+      };
+      const { error } = await supabase.from("respondents").update(patch).eq("id", respondent.id);
+      if (error && /completed_rounds/.test(error.message) && !stillMissing) {
+        await supabase.from("respondents")
+          .update({ status: "responded", responded_at: new Date().toISOString() })
+          .eq("id", respondent.id);
       }
-      if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
-      setStatus('done');
+    }
+
+    setAnswers({});
+    setJustifications({});
+    setIndex(0);
+
+    const next = updated.findIndex((r, i) => i > roundIndex && !r.completed);
+    if (next !== -1) {
+      setRoundIndex(next);
+      setStatus("round_done");
+    } else if (pendingDeptSelection && !selectedDeptLeader) {
+      setStatus("select_dept_leader");
+    } else {
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch { /* ok */ } }
+      setStatus("done");
     }
   };
 
-  const answeredCount = questions.filter(q => answers[q.id] !== undefined).length;
-  const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
-  const orgQCount = allQuestions.filter(q => q.section_type !== 'leadership').length;
-  const leaderQCount = allQuestions.filter(q => q.section_type === 'leadership').length;
-  const leaderRounds = evaluationRounds.filter(r => r.roundType === 'leadership').length;
-  const estimatedMinutes = Math.max(1, Math.ceil((orgQCount + leaderQCount * leaderRounds) * 0.4));
+  const confirmDeptLeader = () => {
+    if (!selectedDeptLeader || !survey) return;
+    setPendingDeptSelection(false);
+    const companyLeaders = survey.leaders.filter((l) => l.type === "company");
+    setRounds((prev) => [
+      ...prev,
+      { leaderName: selectedDeptLeader, type: "leadership", completed: false },
+      ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
+    ]);
+    setRoundIndex(rounds.length);
+    setIndex(0);
+    setAnswers({});
+    setJustifications({});
+    setStatus("round_intro");
+  };
 
-  // Global progress across all rounds
-  const questionsPerRound = (round: EvaluationRound) =>
-    round.roundType === 'leadership' ? leaderQCount : orgQCount;
-  const totalQuestionsAllRounds = evaluationRounds.reduce((acc, r) => acc + questionsPerRound(r), 0);
-  const completedQuestionsAllRounds = evaluationRounds.reduce((acc, r, i) => {
-    if (r.completed) return acc + questionsPerRound(r);
-    if (i === currentRoundIndex) return acc + answeredCount;
+  // ── Números de progresso ───────────────────────────────────────────────────
+  const orgCount = allQuestions.filter((q) => q.section_type !== "leadership").length;
+  const leaderCount = allQuestions.filter((q) => q.section_type === "leadership").length;
+  const perRound = (r: Round) => (r.type === "leadership" ? leaderCount : orgCount);
+
+  const totalAll = rounds.reduce((acc, r) => acc + perRound(r), 0);
+  const doneAll = rounds.reduce((acc, r, i) => {
+    if (r.completed) return acc + perRound(r);
+    if (i === roundIndex) return acc + answeredCount;
     return acc;
   }, 0);
-  const overallProgress = totalQuestionsAllRounds > 0
-    ? Math.round((completedQuestionsAllRounds / totalQuestionsAllRounds) * 100)
-    : 0;
-  const remainingQuestions = Math.max(0, totalQuestionsAllRounds - completedQuestionsAllRounds);
-  const minutesRemaining = Math.max(1, Math.ceil(remainingQuestions * 0.4));
-  const isLastRound = currentRoundIndex >= evaluationRounds.length - 1 && !pendingDeptLeaderSelection;
-  const allAnswered = questions.every(q => {
-    const ans = answers[q.id];
-    if (ans === undefined) return false;
-    if ((q.question_type === 'open_text' || q.question_type === 'text') && typeof ans === 'string' && ans.trim() === '') return false;
-    if (q.has_justification && (!justifications[q.id] || justifications[q.id].trim() === '')) return false;
-    return true;
-  });
-  const currentQ = questions[currentIndex];
-  const currentQuestionBlocksAdvance = (() => {
-    if (!currentQ) return false;
-    const ans = answers[currentQ.id];
-    // Block if open text question has no answer
-    if ((currentQ.question_type === 'open_text' || currentQ.question_type === 'text') &&
-      (ans === undefined || (typeof ans === 'string' && ans.trim() === ''))) return true;
-    // Block if any other question type has no answer selected
-    if (ans === undefined || (typeof ans === 'string' && ans.trim() === '')) return true;
-    // Block if justification is required but missing
-    if (currentQ.has_justification && (
-      !justifications[currentQ.id] ||
-      justifications[currentQ.id].trim() === ''
-    )) return true;
-    return false;
-  })();
-  const currentLeaderName = currentRound?.leaderName || null;
-  const completedRounds = evaluationRounds.filter(r => r.completed).length;
-  const totalRounds = evaluationRounds.length;
+  const overall = totalAll ? Math.round((doneAll / totalAll) * 100) : 0;
+  const minutesLeft = Math.max(1, Math.round(((totalAll - doneAll) * SECONDS_PER_QUESTION) / 60));
+  const totalMinutes = Math.max(1, Math.round((totalAll * SECONDS_PER_QUESTION) / 60));
+  const completedRounds = rounds.filter((r) => r.completed).length;
+  const multi = rounds.length > 1;
 
-  const primaryColor = branding?.primary_color || '#3B82F6';
-  const secondaryColor = branding?.secondary_color || '#1E40AF';
+  const scaleLabelsFor = (q: Question) =>
+    (q.scale_type && SCALE_LABELS[q.scale_type]) || survey?.scale_labels || [];
 
-  const getScaleLabels = (q: Question): string[] => {
-    if (q.scale_type && SCALE_LABELS[q.scale_type]) return SCALE_LABELS[q.scale_type];
-    return survey?.scale_labels || [];
-  };
+  // ── Casca ──────────────────────────────────────────────────────────────────
+  // As cores da empresa entram como variáveis para não virar estilo inline em
+  // cada elemento.
+  const shellStyle = {
+    "--c-primary": branding?.primary ?? "#15498D",
+    "--c-secondary": branding?.secondary ?? "#071A34",
+  } as React.CSSProperties;
 
-  const getRoundLabel = (round: EvaluationRound, idx: number): string => {
-    if (round.roundType === 'org') return 'Perguntas sobre a organização';
-    return round.leaderName || `Avaliação ${idx + 1}`;
-  };
+  const Shell = ({ children, center = false }: { children: React.ReactNode; center?: boolean }) => (
+    <div
+      style={shellStyle}
+      className={cn(
+        "flex min-h-[100dvh] flex-col bg-[linear-gradient(170deg,color-mix(in_srgb,var(--c-primary)_7%,#fff)_0%,#fff_55%)]",
+        center && "items-center justify-center p-6",
+      )}
+    >
+      {children}
+    </div>
+  );
 
-  // --- SCREENS ---
-
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${primaryColor}10, ${secondaryColor}10)` }}>
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderColor: primaryColor }} />
+  const Header = ({ right }: { right?: React.ReactNode }) => (
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/85 px-4 py-3 backdrop-blur-md md:px-6">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {branding?.logo_url
+          ? <img src={branding.logo_url} alt={branding.name} className="h-7 w-auto max-w-[140px] object-contain" />
+          : <span className="grid h-7 w-7 place-items-center rounded-lg text-[13px] font-bold text-white" style={{ background: "var(--c-primary)" }}>
+              {branding?.name?.[0] ?? "?"}
+            </span>}
+        <span className="truncate text-[13px] font-semibold text-slate-700">{branding?.name}</span>
       </div>
+      {right}
+    </header>
+  );
+
+  const AnonymityBadge = ({ className }: { className?: string }) => (
+    <div className={cn("inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11.5px] text-slate-600", className)}>
+      <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />
+      Respostas anônimas
+    </div>
+  );
+
+  // ── Telas de estado ────────────────────────────────────────────────────────
+  if (status === "loading") {
+    return (
+      <Shell center>
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--c-primary)" }} />
+        <p className="mt-4 text-sm text-slate-500">Carregando a pesquisa…</p>
+      </Shell>
     );
   }
 
-  if (status === 'invalid') {
+  if (status === "invalid") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}10, ${secondaryColor}10)` }}>
-        <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-2">Link inválido</h1>
-          <p className="text-muted-foreground">Este link de pesquisa não é válido ou a pesquisa não está mais ativa.</p>
-        </div>
-      </div>
+      <Shell center>
+        <Message
+          icon={<WifiOff className="h-7 w-7" />}
+          title="Link inválido"
+          body="Este link não é válido ou a pesquisa não está mais no ar. Se você recebeu o link por e-mail, confira se ele veio completo."
+        />
+      </Shell>
     );
   }
 
-  if (status === 'already_responded') {
+  if (status === "closed") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}10, ${secondaryColor}10)` }}>
-        <div className="text-center max-w-md">
-          <CheckCircle className="h-16 w-16 mx-auto mb-4" style={{ color: primaryColor }} />
-          <h1 className="text-2xl font-bold mb-2">Você já respondeu</h1>
-          <p className="text-muted-foreground">Sua resposta já foi registrada. Obrigado pela participação!</p>
-        </div>
-      </div>
+      <Shell center>
+        <Message
+          icon={<CalendarX2 className="h-7 w-7" />}
+          title="Pesquisa encerrada"
+          body="O prazo para responder terminou. Obrigado pelo interesse — procure o RH se ainda quiser contribuir."
+          footer={branding?.name}
+        />
+      </Shell>
     );
   }
 
-  if (status === 'no_evaluation') {
+  if (status === "already_responded") {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-        <div className="text-center max-w-md animate-in fade-in duration-500">
-          <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-            <UserX className="h-8 w-8" style={{ color: primaryColor }} />
+      <Shell center>
+        <Message
+          icon={<CheckCircle2 className="h-7 w-7" />}
+          title="Você já respondeu"
+          body="Sua resposta foi registrada. Obrigado por participar!"
+          footer={branding?.name}
+          tone="success"
+        />
+      </Shell>
+    );
+  }
+
+  if (status === "no_evaluation") {
+    return (
+      <Shell center>
+        <Message
+          icon={<UserX className="h-7 w-7" />}
+          title="Nada pendente para você"
+          body="Como liderança empresarial, você não tem avaliações a responder nesta pesquisa."
+          footer={branding?.name}
+        />
+      </Shell>
+    );
+  }
+
+  if (status === "done") {
+    return (
+      <Shell center>
+        <div className="w-full max-w-md text-center duration-500 animate-in fade-in">
+          <div
+            className="mx-auto grid h-20 w-20 place-items-center rounded-full"
+            style={{ background: "color-mix(in srgb, var(--c-primary) 12%, #fff)" }}
+          >
+            <Check className="h-10 w-10" strokeWidth={2.5} style={{ color: "var(--c-primary)" }} />
           </div>
-          <h1 className="text-2xl font-bold mb-3">Sem avaliações pendentes</h1>
-          <p className="text-muted-foreground">
-            Como liderança empresarial, você não possui avaliações para responder nesta pesquisa.
+          <h1 className="mt-6 text-[28px] font-semibold tracking-tight text-slate-900">Pronto. Obrigado!</h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-slate-600">
+            {multi
+              ? `Suas ${rounds.length} etapas foram enviadas.`
+              : "Sua resposta foi enviada."}{" "}
+            O que você escreveu chega ao RH sem o seu nome — o que é lido é o conjunto, nunca a
+            resposta de uma pessoa.
           </p>
-          {branding && <p className="mt-6 text-sm text-muted-foreground">{branding.name}</p>}
+          <div className="mt-7 flex justify-center"><AnonymityBadge /></div>
+          {branding && <p className="mt-8 text-[13px] text-slate-400">{branding.name}</p>}
         </div>
-      </div>
+      </Shell>
     );
   }
 
-  // Department leader selection screen
-  if (status === 'select_dept_leader') {
-    const deptLeaders = survey?.leaders.filter(l => l.type === 'department' && !l.hidden) || [];
+  // ── Escolha do líder de área ───────────────────────────────────────────────
+  if (status === "select_dept_leader") {
+    const deptLeaders = survey?.leaders.filter((l) => l.type === "department" && !l.hidden) ?? [];
+    const hasCompanyLeaders = survey?.leaders.some((l) => l.type === "company");
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-        <header className="p-4 flex items-center gap-3 border-b bg-white/80 backdrop-blur-sm">
-          {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
-          <span className="font-semibold text-sm">{branding?.name}</span>
-        </header>
+      <Shell>
+        <Header />
+        <div className="flex flex-1 items-center justify-center px-4 py-8">
+          <div className="w-full max-w-lg duration-500 animate-in fade-in slide-in-from-bottom-2">
+            <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
+              Quem é a liderança da sua área?
+            </h1>
+            <p className="mt-2 text-[14.5px] leading-relaxed text-slate-600">
+              {hasCompanyLeaders
+                ? "Em seguida você avalia essa pessoa e depois a liderança da empresa."
+                : "Em seguida você avalia essa pessoa."}
+            </p>
 
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg animate-in fade-in duration-500">
-            <div className="text-center mb-8">
-              {branding?.logo_url ? (
-                <img src={branding.logo_url} alt={branding.name} className="h-20 w-auto mx-auto mb-4 object-contain" />
-              ) : (
-                <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-                  <Users className="h-8 w-8" style={{ color: primaryColor }} />
-                </div>
-              )}
-              <h1 className="text-2xl font-bold mb-2">{survey?.title}</h1>
-              {(survey as any)?.intro_text ? (
-                <p className="text-muted-foreground mb-4">{(survey as any).intro_text}</p>
-              ) : survey?.description ? (
-                <p className="text-muted-foreground mb-4">{survey.description}</p>
-              ) : null}
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-6">
-                <Clock className="h-4 w-4" />
-                <span>~{estimatedMinutes} min no total</span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
-              <h2 className="text-lg font-bold mb-2">Quem é seu líder de área?</h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                Selecione a liderança direta da sua área.{survey?.leaders.some(l => l.type === 'company') ? ' Você responderá primeiro sobre a organização, depois avaliará esta pessoa e os líderes empresariais.' : ' Você avaliará esta pessoa.'}
-              </p>
-
-              <div className="space-y-2">
-                {deptLeaders.map(leader => {
-                  const isSelected = selectedDeptLeader === leader.name;
-                  return (
-                    <button
-                      key={leader.name}
-                      onClick={() => setSelectedDeptLeader(leader.name)}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
-                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                      }`}
-                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10` } : {}}
+            <div className="mt-6 space-y-2.5" role="radiogroup" aria-label="Liderança da sua área">
+              {deptLeaders.map((leader) => {
+                const on = selectedDeptLeader === leader.name;
+                return (
+                  <button
+                    key={leader.name}
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setSelectedDeptLeader(leader.name)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl border-2 bg-white p-4 text-left transition-all",
+                      on ? "shadow-[0_10px_30px_-14px_rgba(0,0,0,0.3)]" : "border-slate-200 hover:border-slate-300",
+                    )}
+                    style={on ? { borderColor: "var(--c-primary)", background: "color-mix(in srgb, var(--c-primary) 6%, #fff)" } : undefined}
+                  >
+                    <span
+                      className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full border-2", !on && "border-slate-300")}
+                      style={on ? { borderColor: "var(--c-primary)", background: "var(--c-primary)" } : undefined}
                     >
-                      <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? '' : 'border-gray-300'
-                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
-                        {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
-                      </span>
-                      <span className="font-medium">{leader.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-center">
-              <Button
-                onClick={confirmDeptLeaderSelection}
-                disabled={!selectedDeptLeader}
-                style={selectedDeptLeader ? { backgroundColor: primaryColor } : {}}
-                className={selectedDeptLeader ? 'text-white px-8' : 'px-8'}
-                size="lg"
-              >
-                Continuar <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="mt-6 flex justify-center">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
-                <Shield className="h-3 w-3" />
-                Sua seleção não será vinculada às suas respostas
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'done') {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${primaryColor}10, ${secondaryColor}10)` }}>
-        <div className="text-center max-w-md animate-in fade-in duration-500">
-          <CheckCircle className="h-20 w-20 mx-auto mb-4" style={{ color: primaryColor }} />
-          <h1 className="text-3xl font-bold mb-3">Obrigado!</h1>
-          <p className="text-muted-foreground text-lg">
-            {totalRounds > 1
-              ? `Todas as ${totalRounds} etapas foram concluídas com sucesso.`
-              : 'Sua resposta foi registrada com sucesso.'}
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Shield className="h-4 w-4" />
-            <span>Suas respostas são completamente anônimas.</span>
-          </div>
-          {branding && <p className="mt-6 text-sm text-muted-foreground">{branding.name}</p>}
-        </div>
-      </div>
-    );
-  }
-
-  // Round intro screen
-  if (status === 'round_intro') {
-    const isOrgRound = currentRound?.roundType === 'org';
-    return (
-      <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-        <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
-            <span className="font-semibold text-sm">{branding?.name}</span>
-          </div>
-          {totalRounds > 1 && (
-            <div className="text-sm text-muted-foreground">
-              Etapa {currentRoundIndex + 1} de {totalRounds}
-            </div>
-          )}
-        </header>
-
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg text-center animate-in fade-in duration-500">
-            {branding?.logo_url ? (
-              <img src={branding.logo_url} alt={branding.name} className="h-20 w-auto mx-auto mb-6 object-contain" />
-            ) : (
-              <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: `${primaryColor}15` }}>
-                <Users className="h-8 w-8" style={{ color: primaryColor }} />
-              </div>
-            )}
-
-            {completedRounds === 0 && currentRoundIndex === 0 && (
-              <div className="mb-6">
-                <h1 className="text-2xl font-bold mb-2">{survey?.title}</h1>
-                {(survey as any)?.intro_text ? (
-                  <p className="text-muted-foreground">{(survey as any).intro_text}</p>
-                ) : survey?.description ? (
-                  <p className="text-muted-foreground">{survey.description}</p>
-                ) : null}
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>~{estimatedMinutes} min no total · {totalRounds} etapa{totalRounds > 1 ? 's' : ''}</span>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
-              {isOrgRound ? (
-                <>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {completedRounds === 0 ? 'Primeiro, responda sobre:' : 'Próxima etapa:'}
-                  </p>
-                  <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
-                    A Organização
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Responda as perguntas pensando na empresa/instituição como um todo.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {completedRounds === 0 ? 'Sua avaliação será sobre:' : 'Próxima avaliação sobre:'}
-                  </p>
-                  <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
-                    {currentRound?.leaderName}
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Responda todas as perguntas pensando nesta liderança.
-                  </p>
-                </>
-              )}
-            </div>
-
-            {totalRounds > 1 && (
-              <div className="flex justify-center gap-2 mb-6">
-                {evaluationRounds.map((round, i) => (
-                  <div
-                    key={i}
-                    className={`w-3 h-3 rounded-full transition-all ${
-                      round.completed ? 'scale-100' : i === currentRoundIndex ? 'scale-110 ring-2 ring-offset-2' : 'bg-gray-200'
-                    }`}
-                    style={
-                      round.completed || i === currentRoundIndex
-                        ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}80` }
-                        : {}
-                    }
-                    title={getRoundLabel(round, i)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <Button
-              onClick={startRound}
-              style={{ backgroundColor: primaryColor }}
-              className="text-white px-8"
-              size="lg"
-            >
-              {completedRounds === 0 && currentRoundIndex === 0 ? 'Iniciar' : 'Continuar'}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-
-            <div className="mt-6 flex justify-center">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
-                <Shield className="h-3 w-3" />
-                Respostas 100% anônimas
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Between-rounds screen
-  if (status === 'round_done') {
-    const lastCompletedName = (() => {
-      const last = evaluationRounds.filter(r => r.completed).pop();
-      if (!last) return '';
-      return last.roundType === 'org' ? 'Perguntas sobre a organização' : last.leaderName || '';
-    })();
-    const nextRound = evaluationRounds[currentRoundIndex];
-    const nextIsOrg = nextRound?.roundType === 'org';
-
-    return (
-      <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-        <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
-            <span className="font-semibold text-sm">{branding?.name}</span>
-          </div>
-        </header>
-
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg text-center animate-in fade-in duration-500">
-            <CheckCircle className="h-16 w-16 mx-auto mb-4" style={{ color: primaryColor }} />
-            <h2 className="text-2xl font-bold mb-2">Etapa concluída!</h2>
-            <p className="text-muted-foreground mb-6">
-              Você concluiu: <strong>{lastCompletedName}</strong>.
-            </p>
-
-            <div className="flex justify-center gap-2 mb-6">
-              {evaluationRounds.map((round, i) => (
-                <div
-                  key={i}
-                  className={`w-3 h-3 rounded-full transition-all ${
-                    round.completed ? '' : i === currentRoundIndex ? 'ring-2 ring-offset-2' : 'bg-gray-200'
-                  }`}
-                  style={
-                    round.completed || i === currentRoundIndex
-                      ? { backgroundColor: round.completed ? primaryColor : `${primaryColor}40` }
-                      : {}
-                  }
-                  title={getRoundLabel(round, i)}
-                />
-              ))}
-            </div>
-
-            <p className="text-sm text-muted-foreground mb-6">
-              {completedRounds} de {totalRounds} etapas concluídas. Falta{totalRounds - completedRounds > 1 ? 'm' : ''} {totalRounds - completedRounds}.
-            </p>
-
-            <div className="bg-white rounded-2xl p-6 shadow-sm border mb-6">
-              <p className="text-sm text-muted-foreground mb-2">Próxima etapa:</p>
-              <h2 className="text-2xl font-bold" style={{ color: primaryColor }}>
-                {nextIsOrg ? 'A Organização' : nextRound?.leaderName}
-              </h2>
-              {!nextIsOrg && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Responda pensando nesta liderança.
-                </p>
-              )}
+                      {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    </span>
+                    <span className="text-[15px] font-medium text-slate-800">{leader.name}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <Button
-              onClick={() => setStatus('round_intro')}
-              style={{ backgroundColor: primaryColor }}
-              className="text-white px-8"
+              onClick={confirmDeptLeader}
+              disabled={!selectedDeptLeader}
               size="lg"
+              className="mt-6 h-12 w-full rounded-2xl text-[15px] font-semibold text-white disabled:opacity-40"
+              style={{ background: "var(--c-primary)" }}
             >
               Continuar <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
+
+            <p className="mt-4 text-center text-[12px] text-slate-500">
+              Esta escolha define quem você avalia. Ela não fica ligada às suas respostas.
+            </p>
           </div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
-  // Main survey screen
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${primaryColor}08, ${secondaryColor}08)` }}>
-      <header className="p-4 flex items-center justify-between border-b bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          {branding?.logo_url && <img src={branding.logo_url} alt="" className="h-8 w-auto" />}
-          <span className="font-semibold text-sm">{branding?.name}</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          {currentRound?.roundType === 'org' ? (
-            <span className="font-medium px-2 py-1 rounded-lg text-xs" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
-              Sobre a organização
-            </span>
-          ) : currentLeaderName ? (
-            <span className="font-medium px-2 py-1 rounded-lg text-xs" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
-              Avaliando: {currentLeaderName}
-            </span>
-          ) : null}
-          {totalRounds > 1 && (
-            <span className="text-xs">Etapa {currentRoundIndex + 1}/{totalRounds}</span>
-          )}
-        </div>
-      </header>
+  // ── Abertura de etapa ──────────────────────────────────────────────────────
+  if (status === "round_intro" || status === "round_done") {
+    const justFinished = status === "round_done";
+    const isOrg = round?.type === "org";
+    const first = completedRounds === 0 && roundIndex === 0;
+    const intro = survey?.intro_text || survey?.description;
 
-      {/* Progress */}
-      <div className="px-4 py-2 bg-white/50">
-        <div className="flex justify-between text-xs text-muted-foreground mb-1 gap-2 flex-wrap">
-          <span>
-            {totalRounds > 1 ? (
-              <>Progresso geral: {completedQuestionsAllRounds} de {totalQuestionsAllRounds} perguntas</>
-            ) : (
-              <>{answeredCount} de {questions.length} perguntas</>
+    return (
+      <Shell>
+        <Header
+          right={multi ? (
+            <span className="shrink-0 text-[12.5px] text-slate-500">
+              Etapa {roundIndex + 1} de {rounds.length}
+            </span>
+          ) : undefined}
+        />
+        <div className="flex flex-1 items-center justify-center px-4 py-8">
+          <div className="w-full max-w-lg text-center duration-500 animate-in fade-in slide-in-from-bottom-2">
+            {justFinished && (
+              <div
+                className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full"
+                style={{ background: "color-mix(in srgb, var(--c-primary) 12%, #fff)" }}
+              >
+                <Check className="h-7 w-7" strokeWidth={2.5} style={{ color: "var(--c-primary)" }} />
+              </div>
             )}
+
+            {first && !justFinished && (
+              <>
+                <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-slate-900">
+                  {survey?.title}
+                </h1>
+                {intro && <p className="mt-3 text-[15px] leading-relaxed text-slate-600">{intro}</p>}
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[12px] text-slate-600">
+                    <Clock className="h-3.5 w-3.5" /> cerca de {totalMinutes} min
+                  </span>
+                  <AnonymityBadge />
+                </div>
+              </>
+            )}
+
+            {justFinished && (
+              <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">Etapa concluída</h2>
+            )}
+
+            <div className={cn("rounded-3xl border border-black/[0.06] bg-white p-6 shadow-[0_18px_44px_-28px_rgba(0,0,0,0.35)]", first && !justFinished ? "mt-7" : "mt-6")}>
+              <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-slate-400">
+                {justFinished ? "A seguir" : first ? "Vamos começar por" : "A seguir"}
+              </p>
+              <h3 className="mt-2 text-[23px] font-semibold tracking-tight" style={{ color: "var(--c-primary)" }}>
+                {isOrg ? "A organização" : round?.leaderName}
+              </h3>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">
+                {isOrg
+                  ? "Responda pensando na empresa como um todo — não numa pessoa específica."
+                  : "Responda pensando em como essa pessoa lidera no dia a dia."}
+              </p>
+              <p className="mt-4 text-[12.5px] text-slate-400">
+                {questions.length} {questions.length === 1 ? "pergunta" : "perguntas"} · cerca de{" "}
+                {Math.max(1, Math.round((questions.length * SECONDS_PER_QUESTION) / 60))} min
+              </p>
+            </div>
+
+            {multi && <RoundDots rounds={rounds} current={roundIndex} />}
+
+            <Button
+              onClick={() => setStatus("ready")}
+              size="lg"
+              className="mt-6 h-12 w-full rounded-2xl text-[15px] font-semibold text-white sm:w-auto sm:px-10"
+              style={{ background: "var(--c-primary)" }}
+            >
+              {first && !justFinished ? "Começar" : "Continuar"}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+
+            {multi && (
+              <p className="mt-4 text-[12.5px] text-slate-500">
+                {completedRounds} de {rounds.length} etapas concluídas
+              </p>
+            )}
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  // ── Perguntas ──────────────────────────────────────────────────────────────
+  const submitting = status === "submitting";
+
+  return (
+    <Shell>
+      <Header
+        right={
+          <div className="flex shrink-0 items-center gap-2">
+            {round?.type === "leadership" && round.leaderName ? (
+              <span
+                className="max-w-[46vw] truncate rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                style={{ background: "color-mix(in srgb, var(--c-primary) 11%, #fff)", color: "var(--c-primary)" }}
+              >
+                Avaliando {round.leaderName}
+              </span>
+            ) : (
+              <span
+                className="rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                style={{ background: "color-mix(in srgb, var(--c-primary) 11%, #fff)", color: "var(--c-primary)" }}
+              >
+                A organização
+              </span>
+            )}
+          </div>
+        }
+      />
+
+      {/* Progresso */}
+      <div className="border-b border-black/[0.05] bg-white/70 px-4 py-2.5 md:px-6">
+        <div className="mx-auto flex max-w-2xl items-center gap-3">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/[0.07]">
+            <div
+              className="h-full rounded-full transition-[width] duration-500 ease-out"
+              style={{ width: `${multi ? overall : Math.round((answeredCount / Math.max(1, questions.length)) * 100)}%`, background: "var(--c-primary)" }}
+            />
+          </div>
+          <span className="shrink-0 text-[11.5px] tabular-nums text-slate-500">
+            {multi ? `${doneAll}/${totalAll}` : `${answeredCount}/${questions.length}`}
           </span>
-          <span className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />~{minutesRemaining} min restantes</span>
-            <span className="font-medium">{totalRounds > 1 ? overallProgress : progress}%</span>
+          <span className="hidden shrink-0 items-center gap-1 text-[11.5px] text-slate-400 sm:flex">
+            <Clock className="h-3 w-3" />~{minutesLeft} min
           </span>
         </div>
-        <Progress value={totalRounds > 1 ? overallProgress : progress} className="h-2" />
-        {totalRounds > 1 && (
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-            <span>Etapa atual: {answeredCount}/{questions.length}</span>
-            <span>{progress}% desta etapa</span>
-          </div>
-        )}
       </div>
 
       {submitError && (
-        <div className="mx-4 mt-3 p-4 rounded-xl border-2 border-red-200 bg-red-50 text-sm">
-          <p className="font-medium text-red-800 mb-2">Falha ao enviar</p>
-          <p className="text-red-700 mb-3">{submitError}</p>
-          <Button onClick={submitRound} size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-100">
-            Reenviar respostas
-          </Button>
+        <div className="mx-auto mt-3 w-full max-w-2xl px-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+            <p className="text-[13.5px] font-semibold text-red-900">Não foi possível enviar</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-red-800">{submitError}</p>
+            <Button onClick={submitRound} size="sm" variant="outline" className="mt-3 rounded-xl border-red-300 text-red-800 hover:bg-red-100">
+              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Reenviar
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Question */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        {currentQ && (
-          <div className="w-full max-w-lg animate-in fade-in slide-in-from-right-4 duration-300" key={`${currentRoundIndex}-${currentIndex}`}>
-            <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: primaryColor }}>
-              {currentQ.section_title}
+      <main className="flex flex-1 items-start justify-center px-4 py-7 md:items-center md:py-10">
+        {current && (
+          <div key={`${roundIndex}-${index}`} className="w-full max-w-2xl duration-300 animate-in fade-in slide-in-from-right-3">
+            <p className="text-[11.5px] font-semibold uppercase tracking-[0.13em]" style={{ color: "var(--c-primary)" }}>
+              {current.section_title}
             </p>
-
-            <h2 className="text-xl md:text-2xl font-bold mb-8 leading-relaxed">
-              {currentQ.text}
+            <h2 className="mt-2.5 text-[21px] font-semibold leading-snug tracking-tight text-slate-900 md:text-[25px]">
+              {current.text}
             </h2>
 
-            {/* NPS question (0-10) */}
-            {currentQ.question_type === 'scale' && currentQ.scale_type === 'enps' && (
-              <div className="space-y-2">
-                <div className="grid grid-cols-11 gap-1">
-                  {Array.from({ length: 11 }, (_, i) => i).map(value => {
-                    const isSelected = answers[currentQ.id] === value;
-                    const bgColor = value <= 6 ? '#EF4444' : value <= 8 ? '#F59E0B' : '#22C55E';
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => handleScaleAnswer(value)}
-                        className={`p-3 rounded-lg border-2 text-center transition-all font-bold text-sm ${
-                          isSelected ? 'shadow-lg scale-105 text-white' : 'border-gray-200 hover:border-gray-300 bg-white'
-                        }`}
-                        style={isSelected ? { borderColor: bgColor, backgroundColor: bgColor } : {}}
-                      >
-                        {value}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground px-1">
-                  <span>Nada provável</span>
-                  <span>Extremamente provável</span>
-                </div>
-              </div>
-            )}
+            <div className="mt-7">
+              {current.question_type === "scale" && current.scale_type === "enps" && (
+                <EnpsScale value={answers[current.id] as number | undefined} onPick={answer} />
+              )}
 
-            {/* Scale question (1-5) */}
-            {currentQ.question_type === 'scale' && currentQ.scale_type !== 'enps' && survey && (
-              <div className="space-y-3">
-                {Array.from({ length: survey.scale_max - survey.scale_min + 1 }, (_, i) => survey.scale_min + i).map(value => {
-                  const isSelected = answers[currentQ.id] === value;
-                  const labels = getScaleLabels(currentQ);
-                  const label = labels[value - survey.scale_min] || '';
-                  return (
-                    <button
-                      key={value}
-                      onClick={() => handleScaleAnswer(value)}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                      }`}
-                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
-                    >
-                      <span className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                        isSelected ? '' : 'border-gray-300'
-                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor, color: 'white' } : {}}>
-                        {value}
-                      </span>
-                      <span className="text-sm font-medium">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Choice question */}
-            {currentQ.question_type === 'choice' && currentQ.options && (
-              <div className="space-y-3">
-                {currentQ.options.map(option => {
-                  const isSelected = answers[currentQ.id] === option;
-                  return (
-                    <button
-                      key={option}
-                      onClick={() => handleChoiceAnswer(option)}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 ${
-                        isSelected ? 'shadow-lg scale-[1.02]' : 'border-gray-200 hover:border-gray-300 bg-white'
-                      }`}
-                      style={isSelected ? { borderColor: primaryColor, backgroundColor: `${primaryColor}10`, color: primaryColor } : {}}
-                    >
-                      <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? '' : 'border-gray-300'
-                      }`} style={isSelected ? { borderColor: primaryColor, backgroundColor: primaryColor } : {}}>
-                        {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
-                      </span>
-                      <span className="text-sm font-medium">{option}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Open text question */}
-            {(currentQ.question_type === 'open_text' || currentQ.question_type === 'text') && (
-              <div>
-                <Textarea
-                  value={(answers[currentQ.id] as string) || ''}
-                  onChange={e => setAnswers(a => ({ ...a, [currentQ.id]: e.target.value }))}
-                  placeholder="Escreva sua resposta aqui... (obrigatório)"
-                  className="min-h-[120px] text-base"
+              {current.question_type === "scale" && current.scale_type !== "enps" && survey && (
+                <ScaleOptions
+                  min={survey.scale_min}
+                  max={survey.scale_max}
+                  labels={scaleLabelsFor(current)}
+                  value={answers[current.id] as number | undefined}
+                  onPick={answer}
                 />
-                {answers[currentQ.id] !== undefined && typeof answers[currentQ.id] === 'string' && (answers[currentQ.id] as string).trim() === '' && (
-                  <p className="text-sm text-red-500 mt-2">Esta resposta é obrigatória.</p>
-                )}
-              </div>
-            )}
+              )}
 
-            {/* Justification field */}
-            {currentQ.has_justification && answers[currentQ.id] !== undefined && (
-              <div className="mt-6 animate-in fade-in duration-300">
-                <label className="text-sm font-medium mb-2 block" style={{ color: primaryColor }}>
-                  ✎ {currentQ.justification_prompt} <span className="text-red-500">*</span>
+              {current.question_type === "choice" && current.options && (
+                <ChoiceOptions
+                  options={current.options}
+                  value={answers[current.id] as string | undefined}
+                  onPick={answer}
+                />
+              )}
+
+              {(current.question_type === "open_text" || current.question_type === "text") && (
+                <div>
+                  <Textarea
+                    value={(answers[current.id] as string) || ""}
+                    onChange={(e) => setAnswers((a) => ({ ...a, [current.id]: e.target.value }))}
+                    placeholder="Escreva aqui…"
+                    autoFocus
+                    className="min-h-[140px] rounded-2xl border-slate-200 bg-white text-[15px] leading-relaxed focus-visible:ring-2"
+                    style={{ ["--tw-ring-color" as string]: "var(--c-primary)" }}
+                  />
+                  <p className="mt-2 text-[12px] text-slate-400">
+                    Escreva com suas palavras. Ninguém saberá que foi você.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {current.has_justification && answers[current.id] !== undefined && (
+              <div className="mt-6 duration-300 animate-in fade-in slide-in-from-top-1">
+                <label htmlFor="justification" className="block text-[13.5px] font-semibold text-slate-800">
+                  {current.justification_prompt || "Conte um pouco mais"}
+                  <span className="ml-1 font-normal text-slate-400">· obrigatório</span>
                 </label>
                 <Textarea
-                  value={justifications[currentQ.id] || ''}
-                  onChange={e => setJustifications(j => ({ ...j, [currentQ.id]: e.target.value }))}
-                  placeholder=""
-                  className="min-h-[80px] text-sm"
+                  id="justification"
+                  value={justifications[current.id] || ""}
+                  onChange={(e) => setJustifications((j) => ({ ...j, [current.id]: e.target.value }))}
+                  className="mt-2 min-h-[100px] rounded-2xl border-slate-200 bg-white text-[14.5px] leading-relaxed"
+                  autoFocus
                 />
-                {justifications[currentQ.id] !== undefined && justifications[currentQ.id].trim() === '' && (
-                  <p className="text-sm text-red-500 mt-2">A justificativa é obrigatória.</p>
-                )}
               </div>
             )}
+
+            <p className="mt-6 hidden text-[11.5px] text-slate-400 md:block">
+              Dica: use os números do teclado para responder e as setas para navegar.
+            </p>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Anonymity badge */}
-      <div className="flex justify-center pb-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-white/60 px-3 py-1 rounded-full">
-          <Shield className="h-3 w-3" />
-          Respostas 100% anônimas
-        </div>
-      </div>
+      <div aria-live="polite" className="sr-only" ref={liveRegion} />
 
-      {/* Navigation */}
-      <footer className="p-4 border-t bg-white/80 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+      {/* Navegação */}
+      <footer className="sticky bottom-0 border-t border-black/[0.06] bg-white/90 px-4 py-3 backdrop-blur-md md:px-6">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <Button
             variant="ghost"
-            onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
-            disabled={currentIndex === 0}
+            onClick={goBack}
+            disabled={index === 0}
+            className="h-11 rounded-xl text-slate-600 disabled:opacity-30"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />Anterior
+            <ArrowLeft className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Anterior</span>
           </Button>
 
-          {currentIndex === questions.length - 1 && allAnswered ? (
+          <div className="flex items-center gap-1 text-[11.5px] text-slate-400">
+            {index + 1} de {questions.length}
+          </div>
+
+          {isLast && allAnswered ? (
             <Button
-              onClick={() => isLastRound ? setConfirmOpen(true) : submitRound()}
-              disabled={status === 'submitting'}
-              style={{ backgroundColor: primaryColor }}
-              className="text-white"
+              onClick={() => {
+                const last = roundIndex >= rounds.length - 1 && !pendingDeptSelection;
+                if (last) setConfirmOpen(true); else submitRound();
+              }}
+              disabled={submitting}
+              className="h-11 rounded-xl px-5 text-[14.5px] font-semibold text-white"
+              style={{ background: "var(--c-primary)" }}
             >
-              {status === 'submitting' ? 'Enviando...' : (
-                !isLastRound
-                  ? 'Finalizar e Próxima Etapa'
-                  : 'Revisar e Enviar'
+              {submitting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando…</>
+              ) : roundIndex >= rounds.length - 1 && !pendingDeptSelection ? (
+                <>Revisar e enviar<ArrowRight className="ml-2 h-4 w-4" /></>
+              ) : (
+                <>Concluir etapa<ArrowRight className="ml-2 h-4 w-4" /></>
               )}
-              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
             <Button
-              variant="ghost"
-              onClick={() => setCurrentIndex(i => Math.min(questions.length - 1, i + 1))}
-              disabled={currentIndex === questions.length - 1 || currentQuestionBlocksAdvance}
+              onClick={goNext}
+              disabled={!canAdvance || isLast}
+              className="h-11 rounded-xl px-5 text-[14.5px] font-semibold text-white disabled:opacity-30"
+              style={{ background: "var(--c-primary)" }}
             >
               Próxima<ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -1025,36 +991,227 @@ export default function SurveyPage() {
       </footer>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-3xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Enviar suas respostas?</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm">
-                <p>
-                  Você está prestes a finalizar a pesquisa. Após o envio, <strong>não será possível alterar</strong> suas respostas.
-                </p>
-                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Etapas concluídas:</span><strong>{completedRounds + 1} de {totalRounds}</strong></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Perguntas respondidas:</span><strong>{completedQuestionsAllRounds + (allAnswered ? 0 : 0)}/{totalQuestionsAllRounds}</strong></div>
+              <div className="space-y-3 text-[13.5px] leading-relaxed">
+                <p>Depois do envio não é possível alterar.</p>
+                <div className="space-y-1.5 rounded-2xl bg-muted/60 p-3.5">
+                  <Row label="Perguntas respondidas" value={`${doneAll} de ${totalAll}`} />
+                  {multi && <Row label="Etapas" value={`${completedRounds + 1} de ${rounds.length}`} />}
                 </div>
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Shield className="h-3 w-3" /> Suas respostas são 100% anônimas.
+                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Nada disso fica ligado ao seu nome.
                 </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Revisar</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-xl">Revisar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => { setConfirmOpen(false); submitRound(); }}
-              style={{ backgroundColor: primaryColor }}
-              className="text-white"
+              className="rounded-xl text-white"
+              style={{ background: "var(--c-primary)" }}
             >
-              Confirmar envio
+              Enviar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </Shell>
+  );
+}
+
+// ── Peças ────────────────────────────────────────────────────────────────────
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <strong className="tabular-nums">{value}</strong>
+    </div>
+  );
+}
+
+function Message({
+  icon, title, body, footer, tone = "neutral",
+}: {
+  icon: React.ReactNode; title: string; body: string; footer?: string; tone?: "neutral" | "success";
+}) {
+  return (
+    <div className="max-w-md text-center duration-500 animate-in fade-in">
+      <div
+        className="mx-auto grid h-16 w-16 place-items-center rounded-full"
+        style={{
+          background: tone === "success"
+            ? "color-mix(in srgb, var(--c-primary) 12%, #fff)"
+            : "rgba(0,0,0,0.04)",
+          color: tone === "success" ? "var(--c-primary)" : "#64748b",
+        }}
+      >
+        {icon}
+      </div>
+      <h1 className="mt-5 text-[23px] font-semibold tracking-tight text-slate-900">{title}</h1>
+      <p className="mt-2.5 text-[14.5px] leading-relaxed text-slate-600">{body}</p>
+      {footer && <p className="mt-7 text-[13px] text-slate-400">{footer}</p>}
+    </div>
+  );
+}
+
+function RoundDots({ rounds, current }: { rounds: Round[]; current: number }) {
+  return (
+    <div className="mt-6 flex items-center justify-center gap-1.5">
+      {rounds.map((r, i) => (
+        <span
+          key={i}
+          title={r.type === "org" ? "A organização" : r.leaderName ?? ""}
+          className={cn(
+            "h-1.5 rounded-full transition-all duration-300",
+            r.completed ? "w-6" : i === current ? "w-6" : "w-1.5 bg-slate-200",
+          )}
+          style={
+            r.completed
+              ? { background: "var(--c-primary)" }
+              : i === current
+                ? { background: "color-mix(in srgb, var(--c-primary) 45%, #fff)" }
+                : undefined
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Escala comum.
+ *
+ * Um único markup para os dois tamanhos: no celular cada nota é uma faixa
+ * larga com o número e o rótulo lado a lado, porque cinco alvos em linha num
+ * telefone ficam pequenos demais para o dedo; em tela larga a lista vira uma
+ * régua horizontal, que é o que faz a escala ser lida de uma vez e a nota
+ * ficar comparável entre perguntas. Renderizar as duas versões e esconder uma
+ * duplicaria o grupo de opções para o leitor de tela.
+ */
+function ScaleOptions({
+  min, max, labels, value, onPick,
+}: {
+  min: number; max: number; labels: string[];
+  value: number | undefined; onPick: (v: number) => void;
+}) {
+  const values = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  return (
+    <div role="radiogroup" className="flex flex-col gap-2.5 md:flex-row md:gap-2">
+      {values.map((v) => {
+        const on = value === v;
+        const label = labels[v - min] || `Nota ${v}`;
+        return (
+          <button
+            key={v}
+            role="radio"
+            aria-checked={on}
+            aria-label={label}
+            onClick={() => onPick(v)}
+            className={cn(
+              "group flex items-center gap-3.5 rounded-2xl border-2 bg-white p-3.5 text-left transition-all active:scale-[0.99]",
+              "md:flex-1 md:flex-col md:gap-2 md:px-2 md:py-4 md:text-center md:hover:-translate-y-0.5",
+              on
+                ? "shadow-[0_10px_28px_-14px_rgba(0,0,0,0.3)]"
+                : "border-slate-200 md:hover:border-slate-300",
+            )}
+            style={on ? { borderColor: "var(--c-primary)", background: "color-mix(in srgb, var(--c-primary) 6%, #fff)" } : undefined}
+          >
+            <span
+              className={cn(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 text-[14px] font-bold transition-colors md:h-10 md:w-10 md:text-[15px]",
+                on ? "text-white" : "border-slate-200 text-slate-500 md:text-slate-400 md:group-hover:text-slate-600",
+              )}
+              style={on ? { borderColor: "var(--c-primary)", background: "var(--c-primary)" } : undefined}
+            >
+              {v}
+            </span>
+            <span
+              className={cn(
+                "text-[14.5px] font-medium md:text-[12px] md:leading-tight",
+                on ? "text-slate-900 md:font-semibold" : "text-slate-700 md:text-slate-500",
+              )}
+            >
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** eNPS de 0 a 10, com as três faixas marcadas — a leitura da métrica. */
+function EnpsScale({ value, onPick }: { value: number | undefined; onPick: (v: number) => void }) {
+  const color = (v: number) => (v <= 6 ? "#C2382E" : v <= 8 ? "#C77A16" : "#1E8A5A");
+  return (
+    <div>
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-11">
+        {Array.from({ length: 11 }, (_, v) => {
+          const on = value === v;
+          return (
+            <button
+              key={v}
+              aria-label={`Nota ${v}`}
+              aria-pressed={on}
+              onClick={() => onPick(v)}
+              className={cn(
+                "grid h-12 place-items-center rounded-xl border-2 text-[15px] font-bold transition-all",
+                on ? "scale-105 border-transparent text-white shadow-lg" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+              )}
+              style={on ? { background: color(v) } : undefined}
+            >
+              {v}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2.5 flex justify-between text-[12px] text-slate-500">
+        <span>Nada provável</span>
+        <span>Extremamente provável</span>
+      </div>
+    </div>
+  );
+}
+
+function ChoiceOptions({
+  options, value, onPick,
+}: { options: string[]; value: string | undefined; onPick: (v: string) => void }) {
+  return (
+    <div role="radiogroup" className="space-y-2.5">
+      {options.map((option, i) => {
+        const on = value === option;
+        return (
+          <button
+            key={option}
+            role="radio"
+            aria-checked={on}
+            onClick={() => onPick(option)}
+            className={cn(
+              "flex w-full items-center gap-3.5 rounded-2xl border-2 bg-white p-4 text-left transition-all active:scale-[0.99]",
+              on ? "shadow-[0_10px_28px_-14px_rgba(0,0,0,0.3)]" : "border-slate-200 hover:border-slate-300",
+            )}
+            style={on ? { borderColor: "var(--c-primary)", background: "color-mix(in srgb, var(--c-primary) 6%, #fff)" } : undefined}
+          >
+            <span
+              className={cn(
+                "grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 text-[11.5px] font-bold uppercase",
+                on ? "text-white" : "border-slate-200 text-slate-400",
+              )}
+              style={on ? { borderColor: "var(--c-primary)", background: "var(--c-primary)" } : undefined}
+            >
+              {on ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : "abcdefghij"[i]}
+            </span>
+            <span className={cn("text-[14.5px] font-medium", on ? "text-slate-900" : "text-slate-700")}>
+              {option}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

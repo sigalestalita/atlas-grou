@@ -85,3 +85,15 @@ CREATE POLICY "Anonymous users can insert responses"
       AND (s.opens_at  IS NULL OR s.opens_at  <= now())
       AND (s.closes_at IS NULL OR s.closes_at >= now())
   ));
+
+-- Etapas já enviadas por este respondente.
+--
+-- A pesquisa envia uma etapa por vez (a organização, depois cada liderança).
+-- O respondente só era marcado como "respondeu" no fim de tudo, então quem
+-- fechava o navegador no meio voltava com o token ainda pendente e refazia as
+-- etapas já enviadas — gravando o mesmo voto duas vezes. O controle ficava só
+-- no localStorage, que não acompanha a pessoa de um aparelho para outro.
+-- Guardar aqui é o que torna a retomada segura. A lista tem rótulos de etapa,
+-- não respostas: o anonimato continua intacto.
+ALTER TABLE public.respondents
+  ADD COLUMN IF NOT EXISTS completed_rounds JSONB NOT NULL DEFAULT '[]'::jsonb;
