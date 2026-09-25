@@ -98,6 +98,29 @@ const secondsFor = (q: Question) =>
   (SECONDS_BY_TYPE[q.question_type] ?? 14) + (q.has_justification ? 40 : 0);
 
 /**
+ * Encontra o respondente a partir do token do link.
+ *
+ * Passa por uma função do banco porque o anônimo não lê mais a tabela: nem as
+ * colunas, nem o token — e, no Postgres, sem poder LER a coluna também não se
+ * pode FILTRAR por ela, que é como o link encontra a pessoa. A função recebe o
+ * token, devolve uma linha e não expõe token nem e-mail.
+ *
+ * O caminho antigo fica como reserva para bancos onde a função ainda não existe.
+ */
+async function respondentByToken(token: string): Promise<Record<string, any> | null> {
+  const { data, error } = await supabase.rpc("respondent_by_token", { p_token: token });
+  if (!error) return (Array.isArray(data) ? data[0] : data) ?? null;
+
+  const legacy = await selectCompat<Record<string, unknown>>(
+    ["id", "survey_id", "company_id", "name", "department",
+     "company_leadership", "department_leadership", "status", "responded_at"],
+    ["started_at", "completed_rounds"],
+    (cols) => supabase.from("respondents").select(cols).eq("token", token).limit(1),
+  );
+  return (legacy.data?.[0] as Record<string, any>) ?? null;
+}
+
+/**
  * Marca que a pessoa abriu a pesquisa.
  *
  * Passa pela função do banco, que exige o token — a tabela não aceita mais
@@ -215,15 +238,7 @@ export default function SurveyPage() {
     let resp: any = null;
 
     if (token) {
-      // Colunas explícitas de propósito: `token` e `email` saíram do alcance do
-      // anônimo, e pedir `*` faria a consulta inteira ser recusada. Nada aqui é
-      // informação que a própria pessoa já não tenha.
-      const { data } = await selectCompat<Record<string, unknown>>(
-        ["id", "survey_id", "company_id", "name", "department",
-         "company_leadership", "department_leadership", "status", "responded_at"],
-        ["started_at", "completed_rounds"],
-        (cols) => supabase.from("respondents").select(cols).eq("token", token).limit(1),
-      ).then((r) => ({ data: (r.data?.[0] ?? null) as any }));
+      const data = await respondentByToken(token);
       if (!data) { setStatus("invalid"); return; }
       if (data.status === "responded") { setStatus("already_responded"); return; }
       resp = data;
