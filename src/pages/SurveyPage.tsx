@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -96,6 +95,131 @@ const SECONDS_BY_TYPE: Record<string, number> = {
 };
 const secondsFor = (q: Question) =>
   (SECONDS_BY_TYPE[q.question_type] ?? 14) + (q.has_justification ? 40 : 0);
+
+/**
+ * Casca, cabeçalho e selo vivem AQUI, no escopo do módulo, e não dentro do
+ * componente da pesquisa.
+ *
+ * Definidos lá dentro, cada render criava funções novas — para o React, tipos
+ * de componente diferentes — e ele desmontava e remontava a tela inteira a cada
+ * tecla digitada. Com o `autoFocus` do campo de texto, o cursor voltava para a
+ * posição zero a cada letra: quem escrevia "TESTE" via aparecer "ETSET". O
+ * campo parecia quebrado, e na verdade quebrado estava o resto da árvore.
+ */
+function SurveyShell({
+  children, style, center,
+}: { children: React.ReactNode; style: React.CSSProperties; center?: boolean }) {
+  return (
+    <div
+      style={style}
+      className={cn(
+        "flex min-h-[100dvh] flex-col bg-[linear-gradient(170deg,color-mix(in_srgb,var(--c-primary)_7%,#fff)_0%,#fff_55%)]",
+        center && "items-center justify-center p-6",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Campo de texto da pesquisa.
+ *
+ * Cresce junto com o que a pessoa escreve, em vez de virar uma janelinha com
+ * barra de rolagem: nas perguntas abertas deste questionário a resposta é um
+ * parágrafo inteiro, e não poder reler o que se escreveu faz o texto sair pior.
+ *
+ * O cursor vai para o fim ao abrir, e não para o começo — quem volta para
+ * corrigir uma resposta quer continuar de onde parou.
+ */
+function GrowingTextarea({
+  value, onChange, placeholder, hint, minHeight = 150, className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  minHeight?: number;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(minHeight, el.scrollHeight)}px`;
+  }, [minHeight]);
+
+  useEffect(() => { resize(); }, [value, resize]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
+    // Só ao montar: reposicionar o cursor a cada tecla é exatamente o defeito
+    // que este componente existe para não ter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className={className}>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={1}
+        spellCheck
+        className="w-full resize-none overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-[15px] leading-[1.65] text-slate-900 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-transparent focus:ring-2"
+        style={{ minHeight, ["--tw-ring-color" as string]: "var(--c-primary)" }}
+      />
+      <div className="mt-2 flex items-baseline justify-between gap-3">
+        {hint ? <p className="text-[12px] text-slate-400">{hint}</p> : <span />}
+        {value.trim().length > 0 && (
+          <span className="shrink-0 text-[11.5px] tabular-nums text-slate-400">
+            {value.trim().split(/\s+/).length} palavras
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SurveyHeader({ branding, right }: { branding: Branding | null; right?: React.ReactNode }) {
+  return (
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/85 px-4 py-3 backdrop-blur-md md:px-6">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {branding?.logo_url
+          ? <img src={branding.logo_url} alt={branding.name} className="h-7 w-auto max-w-[140px] object-contain" />
+          : <span className="grid h-7 w-7 place-items-center rounded-lg text-[13px] font-bold text-white" style={{ background: "var(--c-primary)" }}>
+              {branding?.name?.[0] ?? "?"}
+            </span>}
+        <span className="truncate text-[13px] font-semibold text-slate-700">{branding?.name}</span>
+      </div>
+      {right}
+    </header>
+  );
+}
+
+/**
+ * O selo de anonimato.
+ *
+ * Aparece apenas na pesquisa anônima, que é o padrão do produto. Numa rodada
+ * identificada a tela fica calada: não afirma anonimato, porque seria falso, e
+ * não anuncia o contrário, porque quem conduz combina isso fora da ferramenta.
+ * O que não pode acontecer é o selo de "respostas anônimas" numa rodada que não é.
+ */
+function AnonymityTag({ identified, className }: { identified: boolean; className?: string }) {
+  if (identified) return null;
+  return (
+    <div className={cn("inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11.5px] text-slate-600", className)}>
+      <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />
+      Respostas anônimas
+    </div>
+  );
+}
 
 /**
  * Encontra o respondente a partir do token do link.
@@ -628,7 +752,6 @@ export default function SurveyPage() {
   const scaleLabelsFor = (q: Question) =>
     (q.scale_type && SCALE_LABELS[q.scale_type]) || survey?.scale_labels || [];
 
-  // ── Casca ──────────────────────────────────────────────────────────────────
   // As cores da empresa entram como variáveis para não virar estilo inline em
   // cada elemento.
   const shellStyle = {
@@ -636,89 +759,44 @@ export default function SurveyPage() {
     "--c-secondary": branding?.secondary ?? "#071A34",
   } as React.CSSProperties;
 
-  const Shell = ({ children, center = false }: { children: React.ReactNode; center?: boolean }) => (
-    <div
-      style={shellStyle}
-      className={cn(
-        "flex min-h-[100dvh] flex-col bg-[linear-gradient(170deg,color-mix(in_srgb,var(--c-primary)_7%,#fff)_0%,#fff_55%)]",
-        center && "items-center justify-center p-6",
-      )}
-    >
-      {children}
-    </div>
-  );
-
-  const Header = ({ right }: { right?: React.ReactNode }) => (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/85 px-4 py-3 backdrop-blur-md md:px-6">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {branding?.logo_url
-          ? <img src={branding.logo_url} alt={branding.name} className="h-7 w-auto max-w-[140px] object-contain" />
-          : <span className="grid h-7 w-7 place-items-center rounded-lg text-[13px] font-bold text-white" style={{ background: "var(--c-primary)" }}>
-              {branding?.name?.[0] ?? "?"}
-            </span>}
-        <span className="truncate text-[13px] font-semibold text-slate-700">{branding?.name}</span>
-      </div>
-      {right}
-    </header>
-  );
-
-  /**
-   * O selo de anonimato.
-   *
-   * Aparece apenas na pesquisa anônima, que é o padrão do produto. Quando a
-   * organização conduz uma rodada identificada, a tela fica calada: não afirma
-   * anonimato, porque seria falso, e não anuncia o contrário, porque quem
-   * conduz combina isso fora da ferramenta. O que não pode acontecer é o selo
-   * de "respostas anônimas" aparecer numa rodada que não é.
-   */
-  const AnonymityBadge = ({ className }: { className?: string }) => {
-    if (survey?.identified) return null;
-    return (
-      <div className={cn("inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11.5px] text-slate-600", className)}>
-        <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />
-        Respostas anônimas
-      </div>
-    );
-  };
-
   // ── Telas de estado ────────────────────────────────────────────────────────
   if (status === "loading") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--c-primary)" }} />
         <p className="mt-4 text-sm text-slate-500">Carregando a pesquisa…</p>
-      </Shell>
+      </SurveyShell>
     );
   }
 
   if (status === "invalid") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <Message
           icon={<WifiOff className="h-7 w-7" />}
           title="Link inválido"
           body="Este link não é válido ou a pesquisa não está mais no ar. Se você recebeu o link por e-mail, confira se ele veio completo."
         />
-      </Shell>
+      </SurveyShell>
     );
   }
 
   if (status === "closed") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <Message
           icon={<CalendarX2 className="h-7 w-7" />}
           title="Pesquisa encerrada"
           body="O prazo para responder terminou. Obrigado pelo interesse — procure o RH se ainda quiser contribuir."
           footer={branding?.name}
         />
-      </Shell>
+      </SurveyShell>
     );
   }
 
   if (status === "already_responded") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <Message
           icon={<CheckCircle2 className="h-7 w-7" />}
           title="Você já respondeu"
@@ -726,26 +804,26 @@ export default function SurveyPage() {
           footer={branding?.name}
           tone="success"
         />
-      </Shell>
+      </SurveyShell>
     );
   }
 
   if (status === "no_evaluation") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <Message
           icon={<UserX className="h-7 w-7" />}
           title="Nada pendente para você"
           body="Não há avaliações atribuídas a você nesta pesquisa. Se isso parece errado, procure quem está conduzindo."
           footer={branding?.name}
         />
-      </Shell>
+      </SurveyShell>
     );
   }
 
   if (status === "done") {
     return (
-      <Shell center>
+      <SurveyShell style={shellStyle} center>
         <div className="w-full max-w-md text-center duration-500 animate-in fade-in">
           <div
             className="mx-auto grid h-20 w-20 place-items-center rounded-full"
@@ -762,10 +840,10 @@ export default function SurveyPage() {
               ? "Cada pessoa avaliada recebe o retorno reunido."
               : "O que você escreveu chega ao RH sem o seu nome — o que é lido é o conjunto, nunca a resposta de uma pessoa."}
           </p>
-          <div className="mt-7 flex justify-center"><AnonymityBadge /></div>
+          <div className="mt-7 flex justify-center"><AnonymityTag identified={!!survey?.identified} /></div>
           {branding && <p className="mt-8 text-[13px] text-slate-400">{branding.name}</p>}
         </div>
-      </Shell>
+      </SurveyShell>
     );
   }
 
@@ -774,8 +852,8 @@ export default function SurveyPage() {
     const deptLeaders = survey?.leaders.filter((l) => l.type === "department" && !l.hidden) ?? [];
     const hasCompanyLeaders = survey?.leaders.some((l) => l.type === "company");
     return (
-      <Shell>
-        <Header />
+      <SurveyShell style={shellStyle}>
+        <SurveyHeader branding={branding} />
         <div className="flex flex-1 items-center justify-center px-4 py-8">
           <div className="w-full max-w-lg duration-500 animate-in fade-in slide-in-from-bottom-2">
             <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
@@ -829,7 +907,7 @@ export default function SurveyPage() {
             </p>
           </div>
         </div>
-      </Shell>
+      </SurveyShell>
     );
   }
 
@@ -841,8 +919,8 @@ export default function SurveyPage() {
     const intro = survey?.intro_text || survey?.description;
 
     return (
-      <Shell>
-        <Header
+      <SurveyShell style={shellStyle}>
+        <SurveyHeader branding={branding}
           right={multi ? (
             <span className="shrink-0 text-[12.5px] text-slate-500">
               Etapa {roundIndex + 1} de {rounds.length}
@@ -870,7 +948,7 @@ export default function SurveyPage() {
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[12px] text-slate-600">
                     <Clock className="h-3.5 w-3.5" /> cerca de {totalMinutes} min
                   </span>
-                  <AnonymityBadge />
+                  <AnonymityTag identified={!!survey?.identified} />
                 </div>
               </>
             )}
@@ -923,7 +1001,7 @@ export default function SurveyPage() {
             )}
           </div>
         </div>
-      </Shell>
+      </SurveyShell>
     );
   }
 
@@ -931,8 +1009,8 @@ export default function SurveyPage() {
   const submitting = status === "submitting";
 
   return (
-    <Shell>
-      <Header
+    <SurveyShell style={shellStyle}>
+      <SurveyHeader branding={branding}
         right={
           <div className="flex shrink-0 items-center gap-2">
             {round?.type === "self" ? (
@@ -1025,21 +1103,15 @@ export default function SurveyPage() {
               )}
 
               {(current.question_type === "open_text" || current.question_type === "text") && (
-                <div>
-                  <Textarea
-                    value={(answers[current.id] as string) || ""}
-                    onChange={(e) => setAnswers((a) => ({ ...a, [current.id]: e.target.value }))}
-                    placeholder="Escreva aqui…"
-                    autoFocus
-                    className="min-h-[140px] rounded-2xl border-slate-200 bg-white text-[15px] leading-relaxed focus-visible:ring-2"
-                    style={{ ["--tw-ring-color" as string]: "var(--c-primary)" }}
-                  />
-                  <p className="mt-2 text-[12px] text-slate-400">
-                    {survey?.identified
-                      ? "Escreva com suas palavras."
-                      : "Escreva com suas palavras. Ninguém saberá que foi você."}
-                  </p>
-                </div>
+                <GrowingTextarea
+                  key={current.id}
+                  value={(answers[current.id] as string) || ""}
+                  onChange={(v) => setAnswers((a) => ({ ...a, [current.id]: v }))}
+                  placeholder="Escreva aqui…"
+                  hint={survey?.identified
+                    ? "Escreva com suas palavras."
+                    : "Escreva com suas palavras. Ninguém saberá que foi você."}
+                />
               )}
             </div>
 
@@ -1049,19 +1121,21 @@ export default function SurveyPage() {
                   {current.justification_prompt || "Conte um pouco mais"}
                   <span className="ml-1 font-normal text-slate-400">· obrigatório</span>
                 </label>
-                <Textarea
-                  id="justification"
+                <GrowingTextarea
+                  key={`j-${current.id}`}
                   value={justifications[current.id] || ""}
-                  onChange={(e) => setJustifications((j) => ({ ...j, [current.id]: e.target.value }))}
-                  className="mt-2 min-h-[100px] rounded-2xl border-slate-200 bg-white text-[14.5px] leading-relaxed"
-                  autoFocus
+                  onChange={(v) => setJustifications((j) => ({ ...j, [current.id]: v }))}
+                  minHeight={100}
+                  className="mt-2"
                 />
               </div>
             )}
 
-            <p className="mt-6 hidden text-[11.5px] text-slate-400 md:block">
-              Dica: use os números do teclado para responder e as setas para navegar.
-            </p>
+            {current.question_type === "scale" && (
+              <p className="mt-6 hidden text-[11.5px] text-slate-400 md:block">
+                Dica: use os números do teclado para responder e as setas para navegar.
+              </p>
+            )}
           </div>
         )}
       </main>
@@ -1147,7 +1221,7 @@ export default function SurveyPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Shell>
+    </SurveyShell>
   );
 }
 
