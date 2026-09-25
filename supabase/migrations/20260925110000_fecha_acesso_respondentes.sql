@@ -33,6 +33,7 @@ GRANT SELECT (
 -- A política de linha continua permitindo a busca pelo token; o que muda é que
 -- o token não pode mais ser LIDO, então não há como enumerar credencial.
 DROP POLICY IF EXISTS "Anon can view respondent by token" ON public.respondents;
+DROP POLICY IF EXISTS "Anon can look up respondent by token" ON public.respondents;
 CREATE POLICY "Anon can look up respondent by token"
 ON public.respondents FOR SELECT TO anon
 USING (true);
