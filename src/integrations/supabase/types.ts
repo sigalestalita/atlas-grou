@@ -52,33 +52,33 @@ export type Database = {
       }
       evaluation_assignments: {
         Row: {
-          evaluatee_role: string | null
-          is_self: boolean
           company_id: string
           created_at: string
           evaluatee_name: string
+          evaluatee_role: string | null
           evaluator_name: string
           id: string
+          is_self: boolean
           survey_id: string
         }
         Insert: {
-          evaluatee_role?: string | null
-          is_self?: boolean
           company_id: string
           created_at?: string
           evaluatee_name: string
+          evaluatee_role?: string | null
           evaluator_name: string
           id?: string
+          is_self?: boolean
           survey_id: string
         }
         Update: {
-          evaluatee_role?: string | null
-          is_self?: boolean
           company_id?: string
           created_at?: string
           evaluatee_name?: string
+          evaluatee_role?: string | null
           evaluator_name?: string
           id?: string
+          is_self?: boolean
           survey_id?: string
         }
         Relationships: [
@@ -138,55 +138,55 @@ export type Database = {
       }
       respondents: {
         Row: {
-          completed_rounds: Json
-          last_reminder_at: string | null
-          reminder_count: number
-          started_at: string | null
           company_id: string
           company_leadership: string | null
+          completed_rounds: Json
           created_at: string
           department: string | null
           department_leadership: string | null
           email: string | null
           id: string
+          last_reminder_at: string | null
           name: string | null
+          reminder_count: number
           responded_at: string | null
+          started_at: string | null
           status: string
           survey_id: string
           token: string
         }
         Insert: {
-          completed_rounds?: Json
-          last_reminder_at?: string | null
-          reminder_count?: number
-          started_at?: string | null
           company_id: string
           company_leadership?: string | null
+          completed_rounds?: Json
           created_at?: string
           department?: string | null
           department_leadership?: string | null
           email?: string | null
           id?: string
+          last_reminder_at?: string | null
           name?: string | null
+          reminder_count?: number
           responded_at?: string | null
+          started_at?: string | null
           status?: string
           survey_id: string
           token: string
         }
         Update: {
-          completed_rounds?: Json
-          last_reminder_at?: string | null
-          reminder_count?: number
-          started_at?: string | null
           company_id?: string
           company_leadership?: string | null
+          completed_rounds?: Json
           created_at?: string
           department?: string | null
           department_leadership?: string | null
           email?: string | null
           id?: string
+          last_reminder_at?: string | null
           name?: string | null
+          reminder_count?: number
           responded_at?: string | null
+          started_at?: string | null
           status?: string
           survey_id?: string
           token?: string
@@ -257,45 +257,45 @@ export type Database = {
       }
       survey_responses: {
         Row: {
-          is_self: boolean
-          respondent_id: string | null
-          submission_id: string | null
           company_leadership: string | null
           department: string | null
           department_leadership: string | null
           evaluated_leader: string | null
           id: string
+          is_self: boolean
           question_id: string
+          respondent_id: string | null
+          submission_id: string | null
           submitted_at: string
           survey_id: string
           text_value: string | null
           value: number | null
         }
         Insert: {
-          is_self?: boolean
-          respondent_id?: string | null
-          submission_id?: string | null
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
           evaluated_leader?: string | null
           id?: string
+          is_self?: boolean
           question_id: string
+          respondent_id?: string | null
+          submission_id?: string | null
           submitted_at?: string
           survey_id: string
           text_value?: string | null
           value?: number | null
         }
         Update: {
-          is_self?: boolean
-          respondent_id?: string | null
-          submission_id?: string | null
           company_leadership?: string | null
           department?: string | null
           department_leadership?: string | null
           evaluated_leader?: string | null
           id?: string
+          is_self?: boolean
           question_id?: string
+          respondent_id?: string | null
+          submission_id?: string | null
           submitted_at?: string
           survey_id?: string
           text_value?: string | null
@@ -307,6 +307,13 @@ export type Database = {
             columns: ["question_id"]
             isOneToOne: false
             referencedRelation: "survey_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_responses_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "respondents"
             referencedColumns: ["id"]
           },
           {
@@ -355,67 +362,67 @@ export type Database = {
       }
       surveys: {
         Row: {
-          identified: boolean
-          survey_mode: string
           closes_at: string | null
-          opens_at: string | null
-          wave_label: string | null
           company_id: string | null
           created_at: string
           description: string | null
           id: string
+          identified: boolean
           intro_text: string | null
           is_template: boolean
           leaders: Json | null
           open_access: boolean
+          opens_at: string | null
           scale_labels: Json | null
           scale_max: number
           scale_min: number
           status: string
+          survey_mode: string
           title: string
           updated_at: string
+          wave_label: string | null
         }
         Insert: {
-          identified?: boolean
-          survey_mode?: string
           closes_at?: string | null
-          opens_at?: string | null
-          wave_label?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          identified?: boolean
           intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean
+          opens_at?: string | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
           status?: string
+          survey_mode?: string
           title: string
           updated_at?: string
+          wave_label?: string | null
         }
         Update: {
-          identified?: boolean
-          survey_mode?: string
           closes_at?: string | null
-          opens_at?: string | null
-          wave_label?: string | null
           company_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          identified?: boolean
           intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
           open_access?: boolean
+          opens_at?: string | null
           scale_labels?: Json | null
           scale_max?: number
           scale_min?: number
           status?: string
+          survey_mode?: string
           title?: string
           updated_at?: string
+          wave_label?: string | null
         }
         Relationships: [
           {
@@ -429,25 +436,25 @@ export type Database = {
       }
       user_roles: {
         Row: {
-          email: string | null
           company_id: string | null
           created_at: string
+          email: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
-          email?: string | null
           company_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
-          email?: string | null
           company_id?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
@@ -468,11 +475,6 @@ export type Database = {
     }
     Functions: {
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
-      respondent_start: { Args: { p_token: string }; Returns: undefined }
-      respondent_progress: {
-        Args: { p_token: string; p_rounds: Json; p_finished: boolean }
-        Returns: undefined
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -480,6 +482,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      respondent_progress: {
+        Args: { p_finished: boolean; p_rounds: Json; p_token: string }
+        Returns: undefined
+      }
+      respondent_start: { Args: { p_token: string }; Returns: undefined }
     }
     Enums: {
       app_role: "super_admin" | "company_admin"
@@ -498,12 +505,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -527,11 +534,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -552,11 +559,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -577,11 +584,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -594,11 +601,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
