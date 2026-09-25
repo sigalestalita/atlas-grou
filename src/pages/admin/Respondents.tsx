@@ -83,7 +83,9 @@ export default function Respondents() {
     setSurvey(s ?? null);
     if (!s) { setLoading(false); return; }
     const { data } = await supabase.from("respondents").select("*").eq("survey_id", s.id).order("name");
-    setPeople((data || []) as unknown as Person[]);
+    // O respondente de ensaio não entra na lista de colaboradores: ele não foi
+    // convidado, e aparecer aqui só faria a contagem de cadastrados mentir.
+    setPeople(((data || []) as unknown as Person[]).filter((p) => !(p as any).is_test));
     setLoading(false);
   }, [companyId]);
 

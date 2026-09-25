@@ -7,7 +7,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock,
+  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock, FlaskConical,
   Loader2, RefreshCw, ShieldCheck, UserX, WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -187,7 +187,35 @@ function GrowingTextarea({
   );
 }
 
-function SurveyHeader({ branding, right }: { branding: Branding | null; right?: React.ReactNode }) {
+/**
+ * Faixa do modo de ensaio.
+ *
+ * Aparece para quem abre o link de teste, e só para esse. Quem está ensaiando
+ * precisa saber que está ensaiando — sem isso a pessoa termina a pesquisa
+ * achando que respondeu, e a rodada real nunca recebe a resposta dela.
+ */
+function TestBanner() {
+  return (
+    <div className="flex items-center justify-center gap-2 bg-slate-900 px-4 py-2 text-center text-[12.5px] font-medium text-white">
+      <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+      Modo de ensaio — nada do que você responder aqui é gravado ou contabilizado.
+    </div>
+  );
+}
+
+function SurveyHeader({ branding, right, test }: { branding: Branding | null; right?: React.ReactNode; test?: boolean }) {
+  if (test) {
+    return (
+      <div className="sticky top-0 z-20">
+        <TestBanner />
+        <SurveyHeaderBar branding={branding} right={right} />
+      </div>
+    );
+  }
+  return <SurveyHeaderBar branding={branding} right={right} />;
+}
+
+function SurveyHeaderBar({ branding, right }: { branding: Branding | null; right?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/85 px-4 py-3 backdrop-blur-md md:px-6">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -312,6 +340,8 @@ export default function SurveyPage() {
   const [selectedDeptLeader, setSelectedDeptLeader] = useState<string | null>(null);
   const [pendingDeptSelection, setPendingDeptSelection] = useState(false);
 
+  /** Respondente de ensaio: percorre tudo, não grava nada, não conta em nada. */
+  const isTest = !!respondent?.is_test;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const liveRegion = useRef<HTMLDivElement>(null);
@@ -540,7 +570,7 @@ export default function SurveyPage() {
 
     // Marca que a pessoa abriu a pesquisa — alimenta o "começou e não terminou"
     // no acompanhamento, que antes não existia.
-    if (token && resp?.id && !resp.started_at) {
+    if (token && resp?.id && !resp.started_at && !resp.is_test) {
       void markStarted(token, resp.id);
     }
   }, [slug, token, draftKey]);
@@ -611,6 +641,21 @@ export default function SurveyPage() {
     if (!survey || !respondent || !round) return;
     setSubmitError(null);
     setStatus("submitting");
+
+    // No ensaio a etapa avança sem tocar no banco. Nada de "grava e depois
+    // filtra": a resposta não chega a existir, então não há relatório, média ou
+    // exportação que possa contá-la — nem os que rodam fora daqui.
+    if (isTest) {
+      const updated = rounds.map((r, i) => (i === roundIndex ? { ...r, completed: true } : r));
+      setRounds(updated);
+      setAnswers({});
+      setJustifications({});
+      setIndex(0);
+      const next = updated.findIndex((r, i) => i > roundIndex && !r.completed);
+      if (next !== -1) { setRoundIndex(next); setStatus("round_done"); }
+      else setStatus("done");
+      return;
+    }
 
     // Sorteado por envio: agrupa as linhas desta etapa sem identificar quem é.
     const submissionId = crypto.randomUUID();
@@ -853,7 +898,7 @@ export default function SurveyPage() {
     const hasCompanyLeaders = survey?.leaders.some((l) => l.type === "company");
     return (
       <SurveyShell style={shellStyle}>
-        <SurveyHeader branding={branding} />
+        <SurveyHeader test={isTest} branding={branding} />
         <div className="flex flex-1 items-center justify-center px-4 py-8">
           <div className="w-full max-w-lg duration-500 animate-in fade-in slide-in-from-bottom-2">
             <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
@@ -920,7 +965,7 @@ export default function SurveyPage() {
 
     return (
       <SurveyShell style={shellStyle}>
-        <SurveyHeader branding={branding}
+        <SurveyHeader test={isTest} branding={branding}
           right={multi ? (
             <span className="shrink-0 text-[12.5px] text-slate-500">
               Etapa {roundIndex + 1} de {rounds.length}
@@ -1010,7 +1055,7 @@ export default function SurveyPage() {
 
   return (
     <SurveyShell style={shellStyle}>
-      <SurveyHeader branding={branding}
+      <SurveyHeader test={isTest} branding={branding}
         right={
           <div className="flex shrink-0 items-center gap-2">
             {round?.type === "self" ? (

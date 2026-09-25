@@ -35,6 +35,7 @@ interface Respondent {
   started_at: string | null;
   last_reminder_at: string | null;
   token: string;
+  is_test?: boolean;
 }
 
 type PersonState = "responded" | "started" | "pending";
@@ -88,7 +89,8 @@ export default function Tracking() {
       supabase.from("respondents").select("*").eq("survey_id", s.id).order("name"),
     ]);
     setResponses((resp.data || []) as ResponseRow[]);
-    setPeople((ppl.data || []) as unknown as Respondent[]);
+    // O respondente de ensaio some daqui: ele não é convidado, é ferramenta.
+    setPeople(((ppl.data || []) as unknown as Respondent[]).filter((p) => !p.is_test));
     setLoading(false);
   }, [companyId]);
 

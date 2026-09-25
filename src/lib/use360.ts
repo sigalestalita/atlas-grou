@@ -117,13 +117,16 @@ export function use360(companyId: string | null | undefined, surveyId?: string):
         const questionById = new Map((qs || []).map((q) => [q.id, q]));
 
         // A matriz diz quem deveria avaliar quem — é o denominador.
-        const { data: assigns } = await selectCompat<{
+        const { data: assignRows } = await selectCompat<{
           evaluator_name: string; evaluatee_name: string;
-          evaluatee_role?: string | null; is_self?: boolean;
+          evaluatee_role?: string | null; is_self?: boolean; is_test?: boolean;
         }>(
           ["evaluator_name", "evaluatee_name"], [...NEW_COLUMNS.assignments],
           (cols) => supabase.from("evaluation_assignments").select(cols).eq("survey_id", s.id),
         );
+        // As atribuições do ensaio ficam de fora: senão cada pessoa avaliada
+        // apareceria esperando uma avaliação a mais do que vai receber.
+        const assigns = (assignRows ?? []).filter((a) => !a.is_test);
 
         const { data: responses } = await selectCompat<{
           question_id: string; value: number | null; text_value: string | null;
@@ -135,17 +138,22 @@ export function use360(companyId: string | null | undefined, surveyId?: string):
           (cols) => supabase.from("survey_responses").select(cols).eq("survey_id", s.id),
         );
 
-        const { data: people } = await supabase
-          .from("respondents").select("id, name, department, status").eq("survey_id", s.id);
+        const { data: peopleRows } = await selectCompat<{
+          id: string; name: string; department: string | null; status: string; is_test?: boolean;
+        }>(
+          ["id", "name", "department", "status"], ["is_test"],
+          (cols) => supabase.from("respondents").select(cols).eq("survey_id", s.id),
+        );
+        const people = (peopleRows ?? []).filter((p) => !p.is_test);
 
-        const nameById = new Map((people || []).map((p) => [p.id, p.name]));
-        const roleByName = new Map((people || []).map((p) => [p.name, p.department]));
+        const nameById = new Map(people.map((p) => [p.id, p.name]));
+        const roleByName = new Map(people.map((p) => [p.name, p.department]));
 
         // Quem é avaliado: sai da matriz, para que quem ainda não recebeu
         // nenhuma avaliação apareça na lista com zero em vez de sumir dela.
         const evaluateeNames = new Map<string, string | null>();
         const expected = new Map<string, number>();
-        for (const a of assigns ?? []) {
+        for (const a of assigns) {
           const isSelf = a.is_self ?? a.evaluator_name.trim().toLowerCase() === a.evaluatee_name.trim().toLowerCase();
           if (!evaluateeNames.has(a.evaluatee_name)) {
             evaluateeNames.set(a.evaluatee_name, a.evaluatee_role ?? roleByName.get(a.evaluatee_name) ?? null);
@@ -197,8 +205,8 @@ export function use360(companyId: string | null | undefined, surveyId?: string):
         }).sort((a, b) => (b.peerAvg ?? -1) - (a.peerAvg ?? -1));
 
         // Concluiu quem enviou todas as etapas atribuídas a ele.
-        const participants = new Set((assigns ?? []).map((a) => a.evaluator_name)).size;
-        const finished = (people || []).filter((p) => p.status === "responded").length;
+        const participants = new Set(assigns.map((a) => a.evaluator_name)).size;
+        const finished = people.filter((p) => p.status === "responded").length;
 
         if (cancelled) return;
         setState({

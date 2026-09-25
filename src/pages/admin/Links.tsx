@@ -50,9 +50,10 @@ export default function LinksPage() {
 
     setOpenSurvey(surveys.find((s: any) => s.open_access) ?? null);
     const { data } = await supabase.from("respondents")
-      .select("id, name, email, department, status, token")
+      .select("*")
       .eq("survey_id", surveys[0].id).order("name");
-    setPeople((data || []) as Person[]);
+    // O link de ensaio fica fora da lista que vai para as pessoas.
+    setPeople(((data || []) as unknown as Person[]).filter((p) => !(p as any).is_test));
     setLoading(false);
   }, [companyId]);
 

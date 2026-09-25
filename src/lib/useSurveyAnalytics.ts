@@ -268,13 +268,18 @@ export function useSurveyAnalytics(
         // Participação.
         // `started_at` idem: sem o adaptador, a consulta falharia inteira e a
         // participação apareceria zerada mesmo com gente tendo respondido.
-        const { data: respondents } = await selectCompat<{ status: string; responded_at: string | null; started_at?: string | null }>(
-          ["status", "responded_at"], ["started_at"],
+        const { data: respondentRows } = await selectCompat<{
+          status: string; responded_at: string | null; started_at?: string | null; is_test?: boolean;
+        }>(
+          ["status", "responded_at"], ["started_at", "is_test"],
           (cols) => supabase.from("respondents").select(cols).eq("survey_id", survey.id),
         );
-        const invited = respondents?.length ?? 0;
-        const respondedTracked = respondents?.filter((r) => r.status === "responded").length ?? 0;
-        const started = respondents?.filter((r) => (r as any).started_at && r.status !== "responded").length ?? 0;
+        // O respondente de ensaio existe na lista, mas não entra em conta
+        // nenhuma: senão a participação passaria a ser sobre uma pessoa a mais.
+        const respondents = (respondentRows ?? []).filter((r) => !r.is_test);
+        const invited = respondents.length;
+        const respondedTracked = respondents.filter((r) => r.status === "responded").length;
+        const started = respondents.filter((r) => r.started_at && r.status !== "responded").length;
         const people = countPeople(responses);
         // No link aberto não existe lista de convidados: o denominador não faz
         // sentido e a taxa vira quantas pessoas responderam, sem percentual.

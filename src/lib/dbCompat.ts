@@ -135,8 +135,8 @@ export async function writeManyCompat<T extends Record<string, unknown>>(
  */
 export const NEW_COLUMNS = {
   responses: ["submission_id", "respondent_id", "is_self"],
-  respondents: ["started_at", "completed_rounds", "last_reminder_at", "reminder_count"],
+  respondents: ["started_at", "completed_rounds", "last_reminder_at", "reminder_count", "is_test"],
   surveys: ["opens_at", "closes_at", "wave_label", "survey_mode", "identified"],
-  assignments: ["evaluatee_role", "is_self"],
+  assignments: ["evaluatee_role", "is_self", "is_test"],
   userRoles: ["email"],
 } as const;
