@@ -486,22 +486,6 @@ export type Database = {
         Args: { p_finished: boolean; p_rounds: Json; p_token: string }
         Returns: undefined
       }
-      respondent_by_token: {
-        Args: { p_token: string }
-        Returns: {
-          id: string
-          survey_id: string
-          company_id: string
-          name: string
-          department: string | null
-          company_leadership: string | null
-          department_leadership: string | null
-          status: string
-          responded_at: string | null
-          started_at: string | null
-          completed_rounds: Json
-        }[]
-      }
       respondent_start: { Args: { p_token: string }; Returns: undefined }
     }
     Enums: {
