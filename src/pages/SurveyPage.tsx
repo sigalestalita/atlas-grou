@@ -79,8 +79,23 @@ const SCALE_LABELS: Record<string, string[]> = {
   alinhamento: ["Totalmente desalinhado", "Pouco alinhado", "Em parte", "Bem alinhado", "Totalmente alinhado"],
 };
 
-/** ~14s por pergunta — medido em pesquisas de escala com uma pergunta por tela. */
-const SECONDS_PER_QUESTION = 14;
+/**
+ * Quanto custa responder, por tipo de pergunta.
+ *
+ * Tratar tudo como 14s subestimava feio qualquer pesquisa com texto aberto:
+ * uma rodada 360 de 21 perguntas, das quais 14 são redação, saía anunciada como
+ * "5 min" e leva mais de dez. Prometer curto e entregar longo é justamente o que
+ * faz gente abandonar no meio — e aí a pesquisa perde a resposta inteira, não
+ * só o tempo.
+ */
+const SECONDS_BY_TYPE: Record<string, number> = {
+  scale: 10,
+  choice: 12,
+  open_text: 45,
+  text: 45,
+};
+const secondsFor = (q: Question) =>
+  (SECONDS_BY_TYPE[q.question_type] ?? 14) + (q.has_justification ? 40 : 0);
 
 /**
  * Marca que a pessoa abriu a pesquisa.
@@ -155,15 +170,13 @@ export default function SurveyPage() {
   const liveRegion = useRef<HTMLDivElement>(null);
 
   const round = rounds[roundIndex];
+  // A autoavaliação tem seção própria porque o enunciado muda de pessoa:
+  // "os talentos de Fulano" vira "as suas fortalezas".
   const questions = useMemo(() => {
+    if (round?.type === "leadership") return allQuestions.filter((q) => q.section_type === "leadership");
     if (round?.type === "self") {
-      // A autoavaliação tem seção própria porque o enunciado muda de pessoa.
-      // Se a pesquisa não tiver essa seção, cai nas perguntas de avaliação.
       const own = allQuestions.filter((q) => q.section_type === "self");
       return own.length ? own : allQuestions.filter((q) => q.section_type === "leadership");
-    }
-    if (round?.type === "leadership") {
-      return allQuestions.filter((q) => q.section_type === "leadership");
     }
     return allQuestions.filter((q) => q.section_type !== "leadership" && q.section_type !== "self");
   }, [allQuestions, round?.type]);
@@ -563,9 +576,19 @@ export default function SurveyPage() {
   };
 
   // ── Números de progresso ───────────────────────────────────────────────────
-  const orgCount = allQuestions.filter((q) => q.section_type !== "leadership").length;
-  const leaderCount = allQuestions.filter((q) => q.section_type === "leadership").length;
-  const perRound = (r: Round) => (r.type === "leadership" ? leaderCount : orgCount);
+  // Quais perguntas cabem a cada tipo de etapa. Antes a etapa de autoavaliação
+  // caía no mesmo balde da organização ("tudo que não é liderança"), o que só
+  // dava certo porque este questionário não tem perguntas sobre a organização.
+  const questionsOf = (type: Round["type"]) =>
+    type === "leadership" ? allQuestions.filter((q) => q.section_type === "leadership")
+    : type === "self" ? (() => {
+        const own = allQuestions.filter((q) => q.section_type === "self");
+        return own.length ? own : allQuestions.filter((q) => q.section_type === "leadership");
+      })()
+    : allQuestions.filter((q) => q.section_type !== "leadership" && q.section_type !== "self");
+
+  const perRound = (r: Round) => questionsOf(r.type).length;
+  const secondsOf = (r: Round) => questionsOf(r.type).reduce((acc, q) => acc + secondsFor(q), 0);
 
   const totalAll = rounds.reduce((acc, r) => acc + perRound(r), 0);
   const doneAll = rounds.reduce((acc, r, i) => {
@@ -574,8 +597,16 @@ export default function SurveyPage() {
     return acc;
   }, 0);
   const overall = totalAll ? Math.round((doneAll / totalAll) * 100) : 0;
-  const minutesLeft = Math.max(1, Math.round(((totalAll - doneAll) * SECONDS_PER_QUESTION) / 60));
-  const totalMinutes = Math.max(1, Math.round((totalAll * SECONDS_PER_QUESTION) / 60));
+  const totalSeconds = rounds.reduce((acc, r) => acc + secondsOf(r), 0);
+  const doneSeconds = rounds.reduce((acc, r, i) => {
+    if (r.completed) return acc + secondsOf(r);
+    if (i === roundIndex) {
+      return acc + questions.filter(isAnswered).reduce((a, q) => a + secondsFor(q), 0);
+    }
+    return acc;
+  }, 0);
+  const minutesLeft = Math.max(1, Math.round((totalSeconds - doneSeconds) / 60));
+  const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
   const completedRounds = rounds.filter((r) => r.completed).length;
   const multi = rounds.length > 1;
 
@@ -873,7 +904,7 @@ export default function SurveyPage() {
               </p>
               <p className="mt-4 text-[12.5px] text-slate-400">
                 {questions.length} {questions.length === 1 ? "pergunta" : "perguntas"} · cerca de{" "}
-                {Math.max(1, Math.round((questions.length * SECONDS_PER_QUESTION) / 60))} min
+                {Math.max(1, Math.round(questions.reduce((a, q) => a + secondsFor(q), 0) / 60))} min
               </p>
             </div>
 
