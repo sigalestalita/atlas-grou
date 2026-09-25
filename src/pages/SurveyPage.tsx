@@ -8,7 +8,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock, Eye,
+  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock,
   Loader2, RefreshCw, ShieldCheck, UserX, WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -663,27 +663,20 @@ export default function SurveyPage() {
   );
 
   /**
-   * O selo diz a verdade sobre esta pesquisa.
+   * O selo de anonimato.
    *
-   * Quase todas são anônimas. Quando a organização decide o contrário, quem
-   * responde precisa saber ANTES de escrever — um aviso depois do envio não
-   * repara nada, e dizer "anônimo" numa pesquisa identificada seria mentir para
-   * a pessoa no momento em que ela mais confia na ferramenta.
+   * Aparece apenas na pesquisa anônima, que é o padrão do produto. Quando a
+   * organização conduz uma rodada identificada, a tela fica calada: não afirma
+   * anonimato, porque seria falso, e não anuncia o contrário, porque quem
+   * conduz combina isso fora da ferramenta. O que não pode acontecer é o selo
+   * de "respostas anônimas" aparecer numa rodada que não é.
    */
   const AnonymityBadge = ({ className }: { className?: string }) => {
-    const identified = !!survey?.identified;
+    if (survey?.identified) return null;
     return (
-      <div
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px]",
-          identified ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200" : "bg-black/[0.04] text-slate-600",
-          className,
-        )}
-      >
-        {identified
-          ? <Eye className="h-3.5 w-3.5 text-amber-700" />
-          : <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />}
-        {identified ? "Suas respostas são identificadas" : "Respostas anônimas"}
+      <div className={cn("inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11.5px] text-slate-600", className)}>
+        <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />
+        Respostas anônimas
       </div>
     );
   };
@@ -766,7 +759,7 @@ export default function SurveyPage() {
               ? `Suas ${rounds.length} etapas foram enviadas.`
               : "Sua resposta foi enviada."}{" "}
             {survey?.identified
-              ? "Cada pessoa avaliada recebe o retorno sem saber quem escreveu o quê."
+              ? "Cada pessoa avaliada recebe o retorno reunido."
               : "O que você escreveu chega ao RH sem o seu nome — o que é lido é o conjunto, nunca a resposta de uma pessoa."}
           </p>
           <div className="mt-7 flex justify-center"><AnonymityBadge /></div>
@@ -879,18 +872,6 @@ export default function SurveyPage() {
                   </span>
                   <AnonymityBadge />
                 </div>
-                {survey?.identified && (
-                  <div className="mx-auto mt-5 max-w-md rounded-2xl bg-amber-50 p-4 text-left ring-1 ring-amber-200">
-                    <p className="flex items-start gap-2 text-[13px] leading-relaxed text-amber-900">
-                      <Eye className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>
-                        Nesta rodada as respostas <strong>não são anônimas</strong>: quem conduz a
-                        pesquisa vê quem escreveu cada avaliação. A pessoa avaliada recebe os
-                        textos, mas sem saber de quem vieram.
-                      </span>
-                    </p>
-                  </div>
-                )}
               </>
             )}
 
@@ -1055,7 +1036,7 @@ export default function SurveyPage() {
                   />
                   <p className="mt-2 text-[12px] text-slate-400">
                     {survey?.identified
-                      ? "Escreva com suas palavras. A pessoa avaliada lê o texto, mas não sabe quem escreveu."
+                      ? "Escreva com suas palavras."
                       : "Escreva com suas palavras. Ninguém saberá que foi você."}
                   </p>
                 </div>
@@ -1146,11 +1127,11 @@ export default function SurveyPage() {
                   <Row label="Perguntas respondidas" value={`${doneAll} de ${totalAll}`} />
                   {multi && <Row label="Etapas" value={`${completedRounds + 1} de ${rounds.length}`} />}
                 </div>
-                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                  {survey?.identified
-                    ? <><Eye className="h-3.5 w-3.5" /> Esta pesquisa é identificada: a coordenação vê quem escreveu.</>
-                    : <><ShieldCheck className="h-3.5 w-3.5" /> Nada disso fica ligado ao seu nome.</>}
-                </p>
+                {!survey?.identified && (
+                  <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5" /> Nada disso fica ligado ao seu nome.
+                  </p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
