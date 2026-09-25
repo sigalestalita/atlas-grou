@@ -482,6 +482,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      respondent_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          company_id: string
+          company_leadership: string
+          completed_rounds: Json
+          department: string
+          department_leadership: string
+          id: string
+          name: string
+          responded_at: string
+          started_at: string
+          status: string
+          survey_id: string
+        }[]
+      }
       respondent_progress: {
         Args: { p_finished: boolean; p_rounds: Json; p_token: string }
         Returns: undefined
