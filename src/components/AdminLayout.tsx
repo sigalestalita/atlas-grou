@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Outlet, useLocation, useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, FileText, Users, LayoutDashboard, LogOut, BarChart3,
-  Link2, UserCog, MessageSquare, Activity, Download, type LucideIcon,
+  Link2, UserCog, MessageSquare, Activity, Download, UsersRound, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AtlasMark } from "@/components/AtlasMark";
@@ -56,6 +56,7 @@ const COMPANY_ADMIN_GROUPS: NavGroup[] = [
     label: "Resultado",
     items: [
       { title: "Dashboard", url: "/admin/dashboard", icon: LayoutDashboard },
+      { title: "Avaliação 360", url: "/admin/360", icon: UsersRound },
       { title: "Respostas", url: "/admin/responses", icon: MessageSquare },
       { title: "Exportar", url: "/admin/export", icon: Download },
     ],

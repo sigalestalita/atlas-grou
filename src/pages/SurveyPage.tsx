@@ -8,11 +8,15 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock,
+  ArrowLeft, ArrowRight, CalendarX2, Check, CheckCircle2, Clock, Eye,
   Loader2, RefreshCw, ShieldCheck, UserX, WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NEW_COLUMNS, writeCompat, writeManyCompat } from "@/lib/dbCompat";
+import { NEW_COLUMNS, selectCompat, writeCompat, writeManyCompat } from "@/lib/dbCompat";
+import {
+  markCompleted, plan360, planClimate, roundKey,
+  type Assignment, type Plan, type Round,
+} from "@/lib/rounds";
 
 /**
  * A pesquisa como o colaborador a responde.
@@ -41,6 +45,10 @@ interface Question {
 
 interface SurveyData {
   id: string;
+  /** `360` monta as etapas a partir da matriz de quem avalia quem. */
+  mode: "climate" | "360";
+  /** Quando verdadeiro, a resposta guarda quem respondeu — e a tela avisa. */
+  identified: boolean;
   title: string;
   description: string | null;
   intro_text: string | null;
@@ -56,13 +64,6 @@ interface Branding {
   logo_url: string | null;
   primary: string;
   secondary: string;
-}
-
-interface Round {
-  /** `null` = etapa sobre a organização. */
-  leaderName: string | null;
-  type: "org" | "leadership";
-  completed: boolean;
 }
 
 type Status =
@@ -81,8 +82,55 @@ const SCALE_LABELS: Record<string, string[]> = {
 /** ~14s por pergunta — medido em pesquisas de escala com uma pergunta por tela. */
 const SECONDS_PER_QUESTION = 14;
 
-/** Identifica uma etapa de forma estável, para saber o que já foi enviado. */
-const roundKey = (r: Round) => (r.type === "org" ? "org" : `leader:${r.leaderName}`);
+/**
+ * Marca que a pessoa abriu a pesquisa.
+ *
+ * Passa pela função do banco, que exige o token — a tabela não aceita mais
+ * escrita direta do anônimo, senão qualquer um poderia marcar qualquer pessoa
+ * como respondida e trancá-la para fora. O caminho antigo fica como reserva
+ * para o intervalo entre o código subir e a migração rodar.
+ */
+async function markStarted(token: string, id: string): Promise<void> {
+  const { error } = await supabase.rpc("respondent_start", { p_token: token });
+  if (!error) return;
+  await writeCompat({ started_at: new Date().toISOString() }, ["started_at"],
+    (body) => supabase.from("respondents").update(body as never).eq("id", id));
+}
+
+/** Guarda as etapas enviadas e fecha a pesquisa quando a última termina. */
+async function saveProgress(
+  token: string | null, id: string, rounds: string[], finished: boolean,
+): Promise<void> {
+  if (token) {
+    const { error } = await supabase.rpc("respondent_progress", {
+      p_token: token, p_rounds: rounds, p_finished: finished,
+    });
+    if (!error) return;
+  }
+  await writeCompat(
+    {
+      completed_rounds: rounds,
+      ...(finished ? { status: "responded", responded_at: new Date().toISOString() } : {}),
+    },
+    ["completed_rounds"],
+    (body) => supabase.from("respondents").update(body as never).eq("id", id),
+  );
+}
+
+/**
+ * Troca o marcador pelo nome de quem está sendo avaliado.
+ *
+ * As perguntas do 360 são escritas uma vez e valem para todos os avaliados —
+ * "os maiores talentos de {avaliado}". Sem isso, ou a pergunta fica impessoal
+ * ("desta pessoa"), ou seria preciso uma cópia das perguntas por avaliado.
+ */
+/** Compara nomes ignorando caixa e espaço em volta. */
+const same2 = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+function withName(text: string, name: string | null): string {
+  if (!name) return text.replace(/\{avaliado\}/g, "esta pessoa");
+  return text.replace(/\{avaliado\}/g, name);
+}
 
 export default function SurveyPage() {
   const { slug, token } = useParams();
@@ -107,12 +155,18 @@ export default function SurveyPage() {
   const liveRegion = useRef<HTMLDivElement>(null);
 
   const round = rounds[roundIndex];
-  const questions = useMemo(
-    () => round?.type === "leadership"
-      ? allQuestions.filter((q) => q.section_type === "leadership")
-      : allQuestions.filter((q) => q.section_type !== "leadership"),
-    [allQuestions, round?.type],
-  );
+  const questions = useMemo(() => {
+    if (round?.type === "self") {
+      // A autoavaliação tem seção própria porque o enunciado muda de pessoa.
+      // Se a pesquisa não tiver essa seção, cai nas perguntas de avaliação.
+      const own = allQuestions.filter((q) => q.section_type === "self");
+      return own.length ? own : allQuestions.filter((q) => q.section_type === "leadership");
+    }
+    if (round?.type === "leadership") {
+      return allQuestions.filter((q) => q.section_type === "leadership");
+    }
+    return allQuestions.filter((q) => q.section_type !== "leadership" && q.section_type !== "self");
+  }, [allQuestions, round?.type]);
 
   const draftKey = token ? `atlas_draft_${token}` : null;
 
@@ -148,7 +202,15 @@ export default function SurveyPage() {
     let resp: any = null;
 
     if (token) {
-      const { data } = await supabase.from("respondents").select("*").eq("token", token).single();
+      // Colunas explícitas de propósito: `token` e `email` saíram do alcance do
+      // anônimo, e pedir `*` faria a consulta inteira ser recusada. Nada aqui é
+      // informação que a própria pessoa já não tenha.
+      const { data } = await selectCompat<Record<string, unknown>>(
+        ["id", "survey_id", "company_id", "name", "department",
+         "company_leadership", "department_leadership", "status", "responded_at"],
+        ["started_at", "completed_rounds"],
+        (cols) => supabase.from("respondents").select(cols).eq("token", token).limit(1),
+      ).then((r) => ({ data: (r.data?.[0] ?? null) as any }));
       if (!data) { setStatus("invalid"); return; }
       if (data.status === "responded") { setStatus("already_responded"); return; }
       resp = data;
@@ -198,8 +260,12 @@ export default function SurveyPage() {
       } catch { return []; }
     })();
 
+    const mode: "climate" | "360" = (surveyRow as any).survey_mode === "360" ? "360" : "climate";
+    const identified = !!(surveyRow as any).identified;
+
     setSurvey({
-      id: surveyRow.id, title: surveyRow.title, description: surveyRow.description,
+      id: surveyRow.id, mode, identified,
+      title: surveyRow.title, description: surveyRow.description,
       intro_text: (surveyRow as any).intro_text ?? null,
       scale_min: surveyRow.scale_min, scale_max: surveyRow.scale_max,
       scale_labels: labels, closes_at: closesAt, leaders,
@@ -235,39 +301,32 @@ export default function SurveyPage() {
     setAllQuestions(loaded);
 
     const hasLeadershipQuestions = loaded.some((q) => q.section_type === "leadership");
-    const companyLeaders = leaders.filter((l) => l.type === "company");
-    const deptLeaders = leaders.filter((l) => l.type === "department");
-    const myName = (resp.name || "").trim().toLowerCase();
+    const myName = (resp.name || "").trim();
 
-    // Liderança empresarial não se autoavalia e não avalia par.
-    if (companyLeaders.some((l) => l.name.trim().toLowerCase() === myName)) {
-      setStatus("no_evaluation");
-      return;
-    }
+    // Quem responde o quê é decidido em `lib/rounds`, que é função pura e tem
+    // teste. Aqui só se busca o que ela precisa.
+    let planned: Plan;
 
-    const isDeptLeader = deptLeaders.some((l) => l.name.trim().toLowerCase() === myName);
-
-    let built: Round[];
-    let needsDeptSelection = false;
-
-    if (isDeptLeader) {
-      // Líder de área: responde sobre a organização e avalia a liderança acima.
-      built = [
-        { leaderName: null, type: "org", completed: false },
-        ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
-      ];
-    } else if (deptLeaders.length > 0 && hasLeadershipQuestions) {
-      // Colaborador: escolhe o líder de área depois da etapa da organização.
-      built = [{ leaderName: null, type: "org", completed: false }];
-      needsDeptSelection = true;
-    } else if (hasLeadershipQuestions && companyLeaders.length > 0) {
-      built = [
-        { leaderName: null, type: "org", completed: false },
-        ...companyLeaders.map((l) => ({ leaderName: l.name, type: "leadership" as const, completed: false })),
-      ];
+    if (mode === "360") {
+      // A ligação que faltava: a tela "Quem avalia quem" gravava as
+      // atribuições e nada as lia — a pesquisa montava tudo a partir da lista
+      // de lideranças, então a matriz não produzia efeito nenhum.
+      const { data: assignRows } = await selectCompat<Assignment>(
+        ["evaluatee_name"], [...NEW_COLUMNS.assignments],
+        (cols) => supabase.from("evaluation_assignments").select(cols)
+          .eq("survey_id", surveyRow.id).eq("evaluator_name", myName),
+      );
+      planned = plan360(myName, resp.department ?? null, assignRows ?? []);
     } else {
-      built = [{ leaderName: null, type: "org", completed: false }];
+      planned = planClimate(myName, leaders, hasLeadershipQuestions);
     }
+
+    if (planned.kind === "invalid") { setStatus("invalid"); return; }
+    if (planned.kind === "nothing") { setStatus("no_evaluation"); return; }
+
+    let built: Round[] = planned.rounds;
+    let needsDeptSelection = planned.needsDeptSelection;
+    const companyLeaders = leaders.filter((l) => l.type === "company");
 
     // Etapas já enviadas. Vem do servidor primeiro — o rascunho local não
     // acompanha a pessoa quando ela troca de aparelho, e sem isso ela refazia
@@ -300,7 +359,7 @@ export default function SurveyPage() {
       setSelectedDeptLeader(savedDept);
     }
 
-    built = built.map((r) => ({ ...r, completed: done.has(roundKey(r)) }));
+    built = markCompleted(built, done);
     setRounds(built);
     setPendingDeptSelection(needsDeptSelection);
 
@@ -329,9 +388,8 @@ export default function SurveyPage() {
 
     // Marca que a pessoa abriu a pesquisa — alimenta o "começou e não terminou"
     // no acompanhamento, que antes não existia.
-    if (resp?.id && !resp.started_at) {
-      void writeCompat({ started_at: new Date().toISOString() }, ["started_at"],
-        (body) => supabase.from("respondents").update(body as never).eq("id", resp.id));
+    if (token && resp?.id && !resp.started_at) {
+      void markStarted(token, resp.id);
     }
   }, [slug, token, draftKey]);
 
@@ -422,6 +480,11 @@ export default function SurveyPage() {
         department_leadership: respondent.department_leadership,
         evaluated_leader: leader,
         submission_id: submissionId,
+        is_self: round.type === "self",
+        // Só viaja em pesquisa que se declarou identificada. Um gatilho no
+        // banco apaga este campo quando a pesquisa é anônima, então um erro
+        // aqui não vira vazamento.
+        respondent_id: survey.identified ? respondent.id : null,
       };
     }).filter((r) => r.value !== null || r.text_value !== null);
 
@@ -464,16 +527,7 @@ export default function SurveyPage() {
     const stillMissing = updated.some((r) => !r.completed) || (pendingDeptSelection && !selectedDeptLeader);
 
     if (respondent.id) {
-      // Sem a migração, `completed_rounds` não existe. O adaptador retira a
-      // coluna e grava o resto — marcar "respondeu" é o que não pode faltar.
-      await writeCompat(
-        {
-          completed_rounds: completedKeys,
-          ...(stillMissing ? {} : { status: "responded", responded_at: new Date().toISOString() }),
-        },
-        ["completed_rounds"],
-        (body) => supabase.from("respondents").update(body as never).eq("id", respondent.id),
-      );
+      await saveProgress(token ?? null, respondent.id, completedKeys, !stillMissing);
     }
 
     setAnswers({});
@@ -562,12 +616,31 @@ export default function SurveyPage() {
     </header>
   );
 
-  const AnonymityBadge = ({ className }: { className?: string }) => (
-    <div className={cn("inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11.5px] text-slate-600", className)}>
-      <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />
-      Respostas anônimas
-    </div>
-  );
+  /**
+   * O selo diz a verdade sobre esta pesquisa.
+   *
+   * Quase todas são anônimas. Quando a organização decide o contrário, quem
+   * responde precisa saber ANTES de escrever — um aviso depois do envio não
+   * repara nada, e dizer "anônimo" numa pesquisa identificada seria mentir para
+   * a pessoa no momento em que ela mais confia na ferramenta.
+   */
+  const AnonymityBadge = ({ className }: { className?: string }) => {
+    const identified = !!survey?.identified;
+    return (
+      <div
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px]",
+          identified ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200" : "bg-black/[0.04] text-slate-600",
+          className,
+        )}
+      >
+        {identified
+          ? <Eye className="h-3.5 w-3.5 text-amber-700" />
+          : <ShieldCheck className="h-3.5 w-3.5" style={{ color: "var(--c-primary)" }} />}
+        {identified ? "Suas respostas são identificadas" : "Respostas anônimas"}
+      </div>
+    );
+  };
 
   // ── Telas de estado ────────────────────────────────────────────────────────
   if (status === "loading") {
@@ -624,7 +697,7 @@ export default function SurveyPage() {
         <Message
           icon={<UserX className="h-7 w-7" />}
           title="Nada pendente para você"
-          body="Como liderança empresarial, você não tem avaliações a responder nesta pesquisa."
+          body="Não há avaliações atribuídas a você nesta pesquisa. Se isso parece errado, procure quem está conduzindo."
           footer={branding?.name}
         />
       </Shell>
@@ -646,8 +719,9 @@ export default function SurveyPage() {
             {multi
               ? `Suas ${rounds.length} etapas foram enviadas.`
               : "Sua resposta foi enviada."}{" "}
-            O que você escreveu chega ao RH sem o seu nome — o que é lido é o conjunto, nunca a
-            resposta de uma pessoa.
+            {survey?.identified
+              ? "Cada pessoa avaliada recebe o retorno sem saber quem escreveu o quê."
+              : "O que você escreveu chega ao RH sem o seu nome — o que é lido é o conjunto, nunca a resposta de uma pessoa."}
           </p>
           <div className="mt-7 flex justify-center"><AnonymityBadge /></div>
           {branding && <p className="mt-8 text-[13px] text-slate-400">{branding.name}</p>}
@@ -759,6 +833,18 @@ export default function SurveyPage() {
                   </span>
                   <AnonymityBadge />
                 </div>
+                {survey?.identified && (
+                  <div className="mx-auto mt-5 max-w-md rounded-2xl bg-amber-50 p-4 text-left ring-1 ring-amber-200">
+                    <p className="flex items-start gap-2 text-[13px] leading-relaxed text-amber-900">
+                      <Eye className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        Nesta rodada as respostas <strong>não são anônimas</strong>: quem conduz a
+                        pesquisa vê quem escreveu cada avaliação. A pessoa avaliada recebe os
+                        textos, mas sem saber de quem vieram.
+                      </span>
+                    </p>
+                  </div>
+                )}
               </>
             )}
 
@@ -768,15 +854,22 @@ export default function SurveyPage() {
 
             <div className={cn("rounded-3xl border border-black/[0.06] bg-white p-6 shadow-[0_18px_44px_-28px_rgba(0,0,0,0.35)]", first && !justFinished ? "mt-7" : "mt-6")}>
               <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-slate-400">
-                {justFinished ? "A seguir" : first ? "Vamos começar por" : "A seguir"}
+                {round?.type === "self"
+                  ? "Para terminar"
+                  : justFinished || !first ? "A seguir" : "Vamos começar por"}
               </p>
               <h3 className="mt-2 text-[23px] font-semibold tracking-tight" style={{ color: "var(--c-primary)" }}>
-                {isOrg ? "A organização" : round?.leaderName}
+                {isOrg ? "A organização" : round?.type === "self" ? "Você" : round?.leaderName}
               </h3>
+              {round?.role && round?.type !== "self" && (
+                <p className="mt-1 text-[13px] text-slate-500">{round.role}</p>
+              )}
               <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">
                 {isOrg
                   ? "Responda pensando na empresa como um todo — não numa pessoa específica."
-                  : "Responda pensando em como essa pessoa lidera no dia a dia."}
+                  : round?.type === "self"
+                    ? "Agora sobre o seu próprio trabalho. Responda com o mesmo critério que usou para os colegas."
+                    : "Responda pensando em como essa pessoa conduz a pasta no dia a dia."}
               </p>
               <p className="mt-4 text-[12.5px] text-slate-400">
                 {questions.length} {questions.length === 1 ? "pergunta" : "perguntas"} · cerca de{" "}
@@ -815,7 +908,14 @@ export default function SurveyPage() {
       <Header
         right={
           <div className="flex shrink-0 items-center gap-2">
-            {round?.type === "leadership" && round.leaderName ? (
+            {round?.type === "self" ? (
+              <span
+                className="rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                style={{ background: "color-mix(in srgb, var(--c-primary) 11%, #fff)", color: "var(--c-primary)" }}
+              >
+                Autoavaliação
+              </span>
+            ) : round?.type === "leadership" && round.leaderName ? (
               <span
                 className="max-w-[46vw] truncate rounded-full px-2.5 py-1 text-[11.5px] font-medium"
                 style={{ background: "color-mix(in srgb, var(--c-primary) 11%, #fff)", color: "var(--c-primary)" }}
@@ -871,7 +971,7 @@ export default function SurveyPage() {
               {current.section_title}
             </p>
             <h2 className="mt-2.5 text-[21px] font-semibold leading-snug tracking-tight text-slate-900 md:text-[25px]">
-              {current.text}
+              {withName(current.text, round?.type === "self" ? null : round?.leaderName ?? null)}
             </h2>
 
             <div className="mt-7">
@@ -908,7 +1008,9 @@ export default function SurveyPage() {
                     style={{ ["--tw-ring-color" as string]: "var(--c-primary)" }}
                   />
                   <p className="mt-2 text-[12px] text-slate-400">
-                    Escreva com suas palavras. Ninguém saberá que foi você.
+                    {survey?.identified
+                      ? "Escreva com suas palavras. A pessoa avaliada lê o texto, mas não sabe quem escreveu."
+                      : "Escreva com suas palavras. Ninguém saberá que foi você."}
                   </p>
                 </div>
               )}
@@ -999,7 +1101,9 @@ export default function SurveyPage() {
                   {multi && <Row label="Etapas" value={`${completedRounds + 1} de ${rounds.length}`} />}
                 </div>
                 <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Nada disso fica ligado ao seu nome.
+                  {survey?.identified
+                    ? <><Eye className="h-3.5 w-3.5" /> Esta pesquisa é identificada: a coordenação vê quem escreveu.</>
+                    : <><ShieldCheck className="h-3.5 w-3.5" /> Nada disso fica ligado ao seu nome.</>}
                 </p>
               </div>
             </AlertDialogDescription>
@@ -1062,7 +1166,7 @@ function RoundDots({ rounds, current }: { rounds: Round[]; current: number }) {
       {rounds.map((r, i) => (
         <span
           key={i}
-          title={r.type === "org" ? "A organização" : r.leaderName ?? ""}
+          title={r.type === "org" ? "A organização" : r.type === "self" ? "Autoavaliação" : r.leaderName ?? ""}
           className={cn(
             "h-1.5 rounded-full transition-all duration-300",
             r.completed ? "w-6" : i === current ? "w-6" : "w-1.5 bg-slate-200",

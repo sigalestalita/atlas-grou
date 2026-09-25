@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity, Building2, Download, ExternalLink, FileText, KeyRound,
-  LayoutDashboard, Link2, MessageSquare, UserCheck, Users,
+  LayoutDashboard, Link2, MessageSquare, UserCheck, Users, UsersRound,
 } from "lucide-react";
 import { EmptyState } from "@/components/PageHeader";
 
@@ -21,6 +21,7 @@ const TABS = [
   { label: "Pesquisa", path: "survey", icon: FileText },
   { label: "Colaboradores", path: "respondents", icon: Users },
   { label: "Avaliações", path: "evaluations", icon: UserCheck },
+  { label: "360", path: "360", icon: UsersRound },
   { label: "Links", path: "links", icon: Link2 },
   { label: "Acompanhamento", path: "tracking", icon: Activity },
   { label: "Respostas", path: "responses", icon: MessageSquare },

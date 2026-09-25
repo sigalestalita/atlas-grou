@@ -22,6 +22,7 @@ import Links from "@/pages/admin/Links";
 import Responses from "@/pages/admin/Responses";
 import Tracking from "@/pages/admin/Tracking";
 import ExportPage from "@/pages/admin/Export";
+import Feedback360 from "@/pages/admin/Feedback360";
 import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import ReportAccess from "@/pages/admin/ReportAccess";
@@ -75,6 +76,7 @@ const App = () => (
                 <Route index element={<Dashboard />} />
                 <Route path="survey" element={<SurveyConfig />} />
                 <Route path="respondents" element={<Respondents />} />
+                <Route path="360" element={<Feedback360 />} />
                 <Route path="evaluations" element={<EvaluationMatrix />} />
                 <Route path="links" element={<Links />} />
                 <Route path="progress" element={<Navigate to="../tracking" replace />} />
@@ -93,6 +95,7 @@ const App = () => (
               <Route path="progress" element={<Navigate to="/admin/tracking" replace />} />
               <Route path="tracking" element={<Tracking />} />
               <Route path="responses" element={<Responses />} />
+              <Route path="360" element={<Feedback360 />} />
               <Route path="export" element={<ExportPage />} />
             </Route>
 

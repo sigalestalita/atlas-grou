@@ -129,10 +129,14 @@ export async function writeManyCompat<T extends Record<string, unknown>>(
   return { error: last.error, dropped: dropped() };
 }
 
-/** Colunas acrescentadas pela migração 20260922120000. */
+/**
+ * Colunas acrescentadas pelas migrações recentes, na ordem em que entraram.
+ * `20260922120000` trouxe as de anonimato e prazo; `20260925100000`, as do 360.
+ */
 export const NEW_COLUMNS = {
-  responses: ["submission_id"],
+  responses: ["submission_id", "respondent_id", "is_self"],
   respondents: ["started_at", "completed_rounds", "last_reminder_at", "reminder_count"],
-  surveys: ["opens_at", "closes_at", "wave_label"],
+  surveys: ["opens_at", "closes_at", "wave_label", "survey_mode", "identified"],
+  assignments: ["evaluatee_role", "is_self"],
   userRoles: ["email"],
 } as const;
