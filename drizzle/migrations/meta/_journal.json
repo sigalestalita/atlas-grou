@@ -8,6 +8,13 @@
       "when": 1790098139085,
       "tag": "0000_atlas_anonimato_prazo_ondas",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790357219684,
+      "tag": "0001_pesquisa_360",
+      "breakpoints": true
     }
   ]
 }

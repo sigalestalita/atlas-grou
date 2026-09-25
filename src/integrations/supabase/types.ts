@@ -55,24 +55,30 @@ export type Database = {
           company_id: string
           created_at: string
           evaluatee_name: string
+          evaluatee_role: string | null
           evaluator_name: string
           id: string
+          is_self: boolean
           survey_id: string
         }
         Insert: {
           company_id: string
           created_at?: string
           evaluatee_name: string
+          evaluatee_role?: string | null
           evaluator_name: string
           id?: string
+          is_self?: boolean
           survey_id: string
         }
         Update: {
           company_id?: string
           created_at?: string
           evaluatee_name?: string
+          evaluatee_role?: string | null
           evaluator_name?: string
           id?: string
+          is_self?: boolean
           survey_id?: string
         }
         Relationships: [
@@ -256,7 +262,9 @@ export type Database = {
           department_leadership: string | null
           evaluated_leader: string | null
           id: string
+          is_self: boolean
           question_id: string
+          respondent_id: string | null
           submission_id: string | null
           submitted_at: string
           survey_id: string
@@ -269,7 +277,9 @@ export type Database = {
           department_leadership?: string | null
           evaluated_leader?: string | null
           id?: string
+          is_self?: boolean
           question_id: string
+          respondent_id?: string | null
           submission_id?: string | null
           submitted_at?: string
           survey_id: string
@@ -282,7 +292,9 @@ export type Database = {
           department_leadership?: string | null
           evaluated_leader?: string | null
           id?: string
+          is_self?: boolean
           question_id?: string
+          respondent_id?: string | null
           submission_id?: string | null
           submitted_at?: string
           survey_id?: string
@@ -295,6 +307,13 @@ export type Database = {
             columns: ["question_id"]
             isOneToOne: false
             referencedRelation: "survey_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_responses_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "respondents"
             referencedColumns: ["id"]
           },
           {
@@ -348,6 +367,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          identified: boolean
           intro_text: string | null
           is_template: boolean
           leaders: Json | null
@@ -357,6 +377,7 @@ export type Database = {
           scale_max: number
           scale_min: number
           status: string
+          survey_mode: string
           title: string
           updated_at: string
           wave_label: string | null
@@ -367,6 +388,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          identified?: boolean
           intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
@@ -376,6 +398,7 @@ export type Database = {
           scale_max?: number
           scale_min?: number
           status?: string
+          survey_mode?: string
           title: string
           updated_at?: string
           wave_label?: string | null
@@ -386,6 +409,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          identified?: boolean
           intro_text?: string | null
           is_template?: boolean
           leaders?: Json | null
@@ -395,6 +419,7 @@ export type Database = {
           scale_max?: number
           scale_min?: number
           status?: string
+          survey_mode?: string
           title?: string
           updated_at?: string
           wave_label?: string | null
