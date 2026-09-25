@@ -482,6 +482,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      respondent_progress: {
+        Args: { p_finished: boolean; p_rounds: Json; p_token: string }
+        Returns: undefined
+      }
+      respondent_start: { Args: { p_token: string }; Returns: undefined }
     }
     Enums: {
       app_role: "super_admin" | "company_admin"
