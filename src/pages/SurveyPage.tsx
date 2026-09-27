@@ -832,6 +832,22 @@ export default function SurveyPage() {
     "--c-secondary": branding?.secondary ?? "#071A34",
   } as React.CSSProperties;
 
+  // As mesmas variáveis também no documento inteiro.
+  //
+  // Diálogo e menu suspenso são desenhados num portal, pendurado no body, fora
+  // da div da pesquisa — e ali `var(--c-primary)` não existe. O botão "Enviar"
+  // da confirmação ficava então com fundo transparente e texto branco: branco
+  // no branco, ilegível, no passo mais importante da pesquisa.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    raiz.style.setProperty("--c-primary", branding?.primary ?? "#15498D");
+    raiz.style.setProperty("--c-secondary", branding?.secondary ?? "#071A34");
+    return () => {
+      raiz.style.removeProperty("--c-primary");
+      raiz.style.removeProperty("--c-secondary");
+    };
+  }, [branding?.primary, branding?.secondary]);
+
   // ── Telas de estado ────────────────────────────────────────────────────────
   if (status === "loading") {
     return (
