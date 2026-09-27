@@ -593,21 +593,49 @@ export default function SurveyPage() {
   const canAdvance = current ? isAnswered(current) : false;
   const isLast = index === questions.length - 1;
 
+  /** Avanço automático pendente. Navegar na mão sempre o cancela. */
+  const advanceTimer = useRef<number | null>(null);
+  const cancelAdvance = useCallback(() => {
+    if (advanceTimer.current !== null) {
+      window.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+  }, []);
+  useEffect(() => cancelAdvance, [cancelAdvance]);
+
   const goNext = useCallback(() => {
+    cancelAdvance();
     setIndex((i) => Math.min(questions.length - 1, i + 1));
-  }, [questions.length]);
-  const goBack = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
+  }, [questions.length, cancelAdvance]);
+  const goBack = useCallback(() => {
+    cancelAdvance();
+    setIndex((i) => Math.max(0, i - 1));
+  }, [cancelAdvance]);
+
+  /** Primeira pergunta ainda sem resposta nesta etapa. */
+  const firstMissing = useCallback(
+    () => questions.findIndex((q) => !isAnswered(q)),
+    [questions, isAnswered],
+  );
 
   const answer = useCallback((value: number | string) => {
     if (!current) return;
     setAnswers((a) => ({ ...a, [current.id]: value }));
     if (liveRegion.current) liveRegion.current.textContent = `Resposta registrada: ${value}`;
-    // Avança sozinho só quando não falta nada nesta pergunta. Com justificativa
-    // obrigatória, pular tiraria a pessoa do campo antes de ela escrever.
+
+    // Trocar de nota antes do avanço acontecer empilhava DOIS avanços, e a
+    // pesquisa pulava da pergunta 1 para a 3 — a do meio ficava em branco sem
+    // ninguém ver. Cancela o anterior, e o avanço só vale se a pessoa ainda
+    // estiver na pergunta que acabou de responder.
+    if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current);
     if (!current.has_justification) {
-      window.setTimeout(() => setIndex((i) => (i < questions.length - 1 ? i + 1 : i)), 260);
+      const from = index;
+      advanceTimer.current = window.setTimeout(() => {
+        advanceTimer.current = null;
+        setIndex((i) => (i === from && i < questions.length - 1 ? i + 1 : i));
+      }, 260);
     }
-  }, [current, questions.length]);
+  }, [current, index, questions.length]);
 
   // Atalhos de teclado: número responde, setas navegam.
   // Numa pesquisa de uma pergunta por tela, o mouse é o gargalo.
@@ -1188,6 +1216,18 @@ export default function SurveyPage() {
       <div aria-live="polite" className="sr-only" ref={liveRegion} />
 
       {/* Navegação */}
+      {isLast && !allAnswered && (
+        <div className="mx-auto w-full max-w-2xl px-4 pb-1">
+          <p className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-amber-900 ring-1 ring-amber-200">
+            {(() => {
+              const faltam = questions.filter((q) => !isAnswered(q)).length;
+              return faltam === 1
+                ? "Falta 1 pergunta desta etapa. Toque abaixo para ir até ela."
+                : `Faltam ${faltam} perguntas desta etapa. Toque abaixo para ir até a primeira.`;
+            })()}
+          </p>
+        </div>
+      )}
       <footer className="sticky bottom-0 border-t border-black/[0.06] bg-white/90 px-4 py-3 backdrop-blur-md md:px-6">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <Button
@@ -1222,10 +1262,22 @@ export default function SurveyPage() {
                 <>Concluir etapa<ArrowRight className="ml-2 h-4 w-4" /></>
               )}
             </Button>
+          ) : isLast ? (
+            // Na última pergunta o "Próxima" não leva a lugar nenhum, e o
+            // "Concluir" só aparece com tudo respondido. Ficava um botão morto
+            // sem dizer o que faltava: a pessoa dava a pesquisa por travada.
+            // Agora o botão leva direto à pergunta em aberto.
+            <Button
+              onClick={() => { const i = firstMissing(); if (i >= 0) { cancelAdvance(); setIndex(i); } }}
+              className="h-11 rounded-xl px-5 text-[14.5px] font-semibold text-white"
+              style={{ background: "var(--c-primary)" }}
+            >
+              Ir para a pergunta que falta<ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           ) : (
             <Button
               onClick={goNext}
-              disabled={!canAdvance || isLast}
+              disabled={!canAdvance}
               className="h-11 rounded-xl px-5 text-[14.5px] font-semibold text-white disabled:opacity-30"
               style={{ background: "var(--c-primary)" }}
             >
