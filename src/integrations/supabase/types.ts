@@ -50,6 +50,140 @@ export type Database = {
         }
         Relationships: []
       }
+      diagnostic_submissions: {
+        Row: {
+          answers: Json
+          company_id: string
+          company_name: string
+          consent_at: string
+          created_at: string
+          diagnostic_id: string
+          email: string
+          id: string
+          level: string
+          name: string
+          phone: string
+          report_token: string
+          score: number
+        }
+        Insert: {
+          answers: Json
+          company_id: string
+          company_name: string
+          consent_at?: string
+          created_at?: string
+          diagnostic_id: string
+          email: string
+          id?: string
+          level: string
+          name: string
+          phone: string
+          report_token?: string
+          score: number
+        }
+        Update: {
+          answers?: Json
+          company_id?: string
+          company_name?: string
+          consent_at?: string
+          created_at?: string
+          diagnostic_id?: string
+          email?: string
+          id?: string
+          level?: string
+          name?: string
+          phone?: string
+          report_token?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_submissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagnostic_submissions_diagnostic_id_fkey"
+            columns: ["diagnostic_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diagnostics: {
+        Row: {
+          closes_at: string | null
+          company_id: string
+          created_at: string
+          cta_label: string | null
+          cta_url: string | null
+          id: string
+          intro_text: string | null
+          model: string
+          opens_at: string | null
+          questions: Json
+          scale_labels: Json
+          scale_max: number
+          scale_min: number
+          slug: string
+          status: string
+          subtitle: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          closes_at?: string | null
+          company_id: string
+          created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
+          id?: string
+          intro_text?: string | null
+          model?: string
+          opens_at?: string | null
+          questions: Json
+          scale_labels?: Json
+          scale_max?: number
+          scale_min?: number
+          slug: string
+          status?: string
+          subtitle?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string | null
+          company_id?: string
+          created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
+          id?: string
+          intro_text?: string | null
+          model?: string
+          opens_at?: string | null
+          questions?: Json
+          scale_labels?: Json
+          scale_max?: number
+          scale_min?: number
+          slug?: string
+          status?: string
+          subtitle?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostics_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evaluation_assignments: {
         Row: {
           company_id: string
@@ -59,6 +193,7 @@ export type Database = {
           evaluator_name: string
           id: string
           is_self: boolean
+          is_test: boolean
           survey_id: string
         }
         Insert: {
@@ -69,6 +204,7 @@ export type Database = {
           evaluator_name: string
           id?: string
           is_self?: boolean
+          is_test?: boolean
           survey_id: string
         }
         Update: {
@@ -79,6 +215,7 @@ export type Database = {
           evaluator_name?: string
           id?: string
           is_self?: boolean
+          is_test?: boolean
           survey_id?: string
         }
         Relationships: [
@@ -146,6 +283,7 @@ export type Database = {
           department_leadership: string | null
           email: string | null
           id: string
+          is_test: boolean
           last_reminder_at: string | null
           name: string | null
           reminder_count: number
@@ -164,6 +302,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
+          is_test?: boolean
           last_reminder_at?: string | null
           name?: string | null
           reminder_count?: number
@@ -182,6 +321,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
+          is_test?: boolean
           last_reminder_at?: string | null
           name?: string | null
           reminder_count?: number
@@ -474,6 +614,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      diagnostic_level: { Args: { p_score: number }; Returns: string }
+      get_diagnostic_report: { Args: { p_token: string }; Returns: Json }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -491,6 +633,7 @@ export type Database = {
           department: string
           department_leadership: string
           id: string
+          is_test: boolean
           name: string
           responded_at: string
           started_at: string
@@ -503,6 +646,18 @@ export type Database = {
         Returns: undefined
       }
       respondent_start: { Args: { p_token: string }; Returns: undefined }
+      submit_diagnostic: {
+        Args: {
+          p_answers: Json
+          p_company: string
+          p_consent: boolean
+          p_diagnostic_id: string
+          p_email: string
+          p_name: string
+          p_phone: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "super_admin" | "company_admin"
