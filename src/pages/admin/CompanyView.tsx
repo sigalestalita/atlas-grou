@@ -3,7 +3,7 @@ import { NavLink, Outlet, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Activity, Building2, Download, ExternalLink, FileText, KeyRound,
+  Activity, Building2, Download, ExternalLink, FileText, Gauge, KeyRound,
   LayoutDashboard, Link2, MessageSquare, UserCheck, Users, UsersRound,
 } from "lucide-react";
 import { EmptyState } from "@/components/PageHeader";
@@ -27,6 +27,7 @@ const TABS = [
   { label: "Respostas", path: "responses", icon: MessageSquare },
   { label: "Exportar", path: "export", icon: Download },
   { label: "Acesso ao relatório", path: "report-access", icon: KeyRound },
+  { label: "Diagnóstico", path: "diagnostico", icon: Gauge },
 ];
 
 /** Casca de uma empresa vista pelo super admin. */

@@ -99,6 +99,49 @@ tela, o relatório e a planilha contem a mesma história.
 
 ---
 
+## Diagnóstico por link aberto
+
+Além da pesquisa de clima, o Atlas roda **diagnósticos**: questionários curtos,
+por link aberto, em que a pessoa se identifica e recebe na hora um relatório
+individual. O primeiro é o de **maturidade da liderança**, da Grou
+(`/diagnostico/grou/maturidade-lideranca`).
+
+É a exceção declarada à regra do anonimato, e por isso não divide nada com a
+pesquisa de clima:
+
+- **Tabelas próprias.** `diagnostics` (o questionário) e `diagnostic_submissions`
+  (quem respondeu, com nome, e-mail, telefone e empresa). Nada em `surveys` nem
+  em `survey_responses` — as telas que pegam "a pesquisa mais recente da
+  empresa" continuam vendo só a pesquisa de clima.
+- **Consentimento antes das perguntas.** A pessoa informa os dados e concorda
+  com o uso deles; sem isso o banco recusa o envio.
+- **O anônimo não toca na tabela de respostas.** Envia por `submit_diagnostic`,
+  que valida os campos e as notas e calcula o índice no banco, e lê o próprio
+  relatório por `get_diagnostic_report`, com o token sorteado no envio. O
+  relatório não devolve e-mail nem telefone.
+- **Quem vê os contatos:** super admin e o admin da própria empresa, na aba
+  *Diagnóstico*, com exportação para planilha.
+
+### Como o relatório é calculado
+
+Tudo em `src/lib/diagnostic.ts`, com as fronteiras repetidas em
+`diagnostic_level()` no banco (o teste fixa as duas).
+
+- **Índice (0–100)** — pontos obtidos sobre o máximo possível. Oito afirmações
+  de 0 a 5: 40 pontos valem 100.
+- **Nível** — Inicial (0–20), Reativa (21–40), Em estruturação (41–60),
+  Estruturada (61–80), Estratégica (81–100). Cada um traz o que significa e o
+  movimento para o seguinte.
+- **Pilares** — as afirmações se agrupam duas a duas: *Clareza do papel* (1, 2),
+  *Potencial e sucessão* (3, 6), *Gestão no dia a dia* (4, 5) e *Decisões por
+  evidência* (7, 8). Mesmo índice, por pilar, desenhado num radar.
+- **Por afirmação** — 0–1 *ausente*, 2–3 *em desenvolvimento*, 4–5 *consolidado*.
+- **O que sustenta** — notas a partir de 4, maiores primeiro, até três.
+- **Onde agir primeiro** — notas até 3, menores primeiro, até três, cada uma com
+  uma recomendação concreta. Empate segue a ordem do questionário.
+
+---
+
 ## Stack
 
 React 18 · TypeScript · Vite · Tailwind · shadcn/ui · Supabase (Postgres, Auth,

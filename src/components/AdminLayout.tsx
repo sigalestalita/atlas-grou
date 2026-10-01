@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Outlet, useLocation, useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, FileText, Users, LayoutDashboard, LogOut, BarChart3,
-  Link2, UserCog, MessageSquare, Activity, Download, UsersRound, type LucideIcon,
+  Link2, UserCog, MessageSquare, Activity, Download, UsersRound, Gauge, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AtlasMark } from "@/components/AtlasMark";
@@ -67,6 +67,7 @@ const COMPANY_ADMIN_GROUPS: NavGroup[] = [
       { title: "Configuração", url: "/admin/survey", icon: FileText },
       { title: "Colaboradores", url: "/admin/respondents", icon: Users },
       { title: "Links", url: "/admin/links", icon: Link2 },
+      { title: "Diagnóstico", url: "/admin/diagnostico", icon: Gauge },
     ],
   },
   {

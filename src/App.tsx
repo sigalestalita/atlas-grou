@@ -27,6 +27,9 @@ import EvaluationMatrix from "@/pages/admin/EvaluationMatrix";
 import PlatformAnalytics from "@/pages/admin/PlatformAnalytics";
 import ReportAccess from "@/pages/admin/ReportAccess";
 import PublicReport from "@/pages/PublicReport";
+import DiagnosticPage from "@/pages/DiagnosticPage";
+import DiagnosticReport from "@/pages/DiagnosticReport";
+import Diagnostics from "@/pages/admin/Diagnostics";
 
 import NotFound from "./pages/NotFound";
 import { useParams } from "react-router-dom";
@@ -57,6 +60,10 @@ const App = () => (
             <Route path="/survey/:slug/:token" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
             <Route path="/survey/:slug" element={<SurveyErrorBoundary><SurveyPage /></SurveyErrorBoundary>} />
 
+            {/* Diagnóstico por link aberto, identificado, com relatório individual */}
+            <Route path="/diagnostico/resultado/:token" element={<DiagnosticReport />} />
+            <Route path="/diagnostico/:companySlug/:diagnosticSlug" element={<SurveyErrorBoundary><DiagnosticPage /></SurveyErrorBoundary>} />
+
             {/* Public shareable report */}
             <Route path="/relatorio/:slug" element={<PublicReport />} />
             <Route path="/:resultSlug" element={<ResultSlugGate />} />
@@ -84,6 +91,7 @@ const App = () => (
                 <Route path="responses" element={<Responses />} />
                 <Route path="export" element={<ExportPage />} />
                 <Route path="report-access" element={<ReportAccess />} />
+                <Route path="diagnostico" element={<Diagnostics />} />
               </Route>
 
 
@@ -97,6 +105,7 @@ const App = () => (
               <Route path="responses" element={<Responses />} />
               <Route path="360" element={<Feedback360 />} />
               <Route path="export" element={<ExportPage />} />
+              <Route path="diagnostico" element={<Diagnostics />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

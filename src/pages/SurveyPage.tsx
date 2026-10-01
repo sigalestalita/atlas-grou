@@ -106,7 +106,7 @@ const secondsFor = (q: Question) =>
  * posição zero a cada letra: quem escrevia "TESTE" via aparecer "ETSET". O
  * campo parecia quebrado, e na verdade quebrado estava o resto da árvore.
  */
-function SurveyShell({
+export function SurveyShell({
   children, style, center,
 }: { children: React.ReactNode; style: React.CSSProperties; center?: boolean }) {
   return (
@@ -215,7 +215,7 @@ function SurveyHeader({ branding, right, test }: { branding: Branding | null; ri
   return <SurveyHeaderBar branding={branding} right={right} />;
 }
 
-function SurveyHeaderBar({ branding, right }: { branding: Branding | null; right?: React.ReactNode }) {
+export function SurveyHeaderBar({ branding, right }: { branding: Branding | null; right?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/85 px-4 py-3 backdrop-blur-md md:px-6">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -1349,7 +1349,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Message({
+export function Message({
   icon, title, body, footer, tone = "neutral",
 }: {
   icon: React.ReactNode; title: string; body: string; footer?: string; tone?: "neutral" | "success";
@@ -1408,7 +1408,7 @@ function RoundDots({ rounds, current }: { rounds: Round[]; current: number }) {
  * ficar comparável entre perguntas. Renderizar as duas versões e esconder uma
  * duplicaria o grupo de opções para o leitor de tela.
  */
-function ScaleOptions({
+export function ScaleOptions({
   min, max, labels, value, onPick,
 }: {
   min: number; max: number; labels: string[];
