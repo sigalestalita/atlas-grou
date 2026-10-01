@@ -59,6 +59,7 @@ export type Database = {
           evaluator_name: string
           id: string
           is_self: boolean
+          is_test: boolean
           survey_id: string
         }
         Insert: {
@@ -69,6 +70,7 @@ export type Database = {
           evaluator_name: string
           id?: string
           is_self?: boolean
+          is_test?: boolean
           survey_id: string
         }
         Update: {
@@ -79,6 +81,7 @@ export type Database = {
           evaluator_name?: string
           id?: string
           is_self?: boolean
+          is_test?: boolean
           survey_id?: string
         }
         Relationships: [
@@ -146,6 +149,7 @@ export type Database = {
           department_leadership: string | null
           email: string | null
           id: string
+          is_test: boolean
           last_reminder_at: string | null
           name: string | null
           reminder_count: number
@@ -164,6 +168,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
+          is_test?: boolean
           last_reminder_at?: string | null
           name?: string | null
           reminder_count?: number
@@ -182,6 +187,7 @@ export type Database = {
           department_leadership?: string | null
           email?: string | null
           id?: string
+          is_test?: boolean
           last_reminder_at?: string | null
           name?: string | null
           reminder_count?: number
@@ -491,6 +497,7 @@ export type Database = {
           department: string
           department_leadership: string
           id: string
+          is_test: boolean
           name: string
           responded_at: string
           started_at: string
