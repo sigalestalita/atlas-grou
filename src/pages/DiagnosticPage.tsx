@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { iniciaPixel, pixelDoDiagnostico, registraLead } from "@/lib/metaPixel";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ const ADVANCE_MS = 380;
 export default function DiagnosticPage() {
   const { companySlug, diagnosticSlug } = useParams();
   const navigate = useNavigate();
+  const pixelId = pixelDoDiagnostico(companySlug, diagnosticSlug);
+  useEffect(() => { if (pixelId) iniciaPixel(pixelId); }, [pixelId]);
 
   const [status, setStatus] = useState<Status>("loading");
   const [diag, setDiag] = useState<Diagnostic | null>(null);
@@ -230,6 +233,7 @@ export default function DiagnosticPage() {
       return;
     }
     try { if (draftKey) localStorage.removeItem(draftKey); } catch { /* sem rascunho */ }
+    if (pixelId) registraLead();
     navigate(`/diagnostico/resultado/${data}`, { replace: true });
   };
 
